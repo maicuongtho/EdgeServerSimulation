@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Simu5G TopoT2: Hierarchical 5G MEC Simulation (Local vs. Regional Edge)</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #0b1120; color: #f1f5f9; overflow: hidden; }
+  #app { display: flex; flex-direction: column; width: 100vw; height: 100vh; }
+
+  .topbar {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    padding: 10px 18px; background: #1e293b; border-bottom: 1px solid #334155; gap: 10px;
+  }
+  .brand { display: flex; flex-direction: column; }
+  .brand-title { font-size: 15px; font-weight: 700; color: #38bdf8; letter-spacing: 0.4px; }
+  .brand-sub { font-size: 11px; color: #94a3b8; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button {
+    padding: 6px 11px; border: 1px solid #475569; border-radius: 5px;
+    background: #0f172a; color: #e2e8f0; font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s;
+  }
+  button:hover { background: #334155; }
+  button.active { background: #0284c7; border-color: #38bdf8; color: #fff; }
+  button.btn-ho { background: #7c3aed; border-color: #a78bfa; color: #fff; }
+  button.btn-ho:hover { background: #6d28d9; }
+  button.btn-burst { background: #d97706; border-color: #fbbf24; color: #fff; }
+  button.btn-burst:hover { background: #b45309; }
+  button.btn-fs { background: #059669; border-color: #34d399; color: #fff; }
+
+  .speed-box {
+    display: flex; align-items: center; gap: 6px; background: #0f172a;
+    padding: 4px 10px; border-radius: 5px; border: 1px solid #334155; font-size: 12px;
+  }
+  input[type=range] { width: 80px; accent-color: #38bdf8; cursor: pointer; }
+
+  .kpi-strip {
+    display: flex; justify-content: space-around; align-items: center;
+    background: #131c31; padding: 6px 14px; border-bottom: 1px solid #334155; font-size: 12px;
+  }
+  .kpi b { color: #38bdf8; font-size: 13px; }
+
+  .main-area { display: flex; flex: 1; overflow: hidden; }
+  .canvas-zone { flex: 1; display: flex; flex-direction: column; position: relative; background: #0b1120; }
+  canvas { flex: 1; width: 100%; height: 100%; display: block; }
+
+  .legend-bar {
+    display: flex; flex-wrap: wrap; justify-content: center; gap: 16px;
+    padding: 7px 14px; background: #131c31; border-top: 1px solid #334155; font-size: 11px; color: #cbd5e1;
+  }
+  .leg-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+  .sidebar {
+    width: 340px; background: #131c31; border-left: 1px solid #334155;
+    display: flex; flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 10px 14px; font-size: 12px; font-weight: 700; color: #38bdf8;
+    border-bottom: 1px solid #334155; background: #1e293b; letter-spacing: 0.5px;
+  }
+  .log-list {
+    flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px;
+    font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;
+  }
+  .log-entry {
+    padding: 6px 8px; background: #0f172a; border-radius: 4px; border-left: 3px solid #475569;
+    line-height: 1.4; color: #e2e8f0;
+  }
+  .log-entry.ctrl { border-left-color: #a855f7; }
+  .log-entry.local { border-left-color: #10b981; }
+  .log-entry.central { border-left-color: #38bdf8; }
+  .log-entry.done { border-left-color: #2dd4bf; }
+  .log-entry.ho { border-left-color: #f59e0b; }
+  .tag { font-weight: 700; margin-right: 4px; }
+
+  .author-footer {
+    padding: 9px 12px; background: #0f172a; border-top: 1px solid #334155;
+    font-size: 11px; color: #94a3b8; text-align: center;
+  }
+  .author-footer b { color: #e2e8f0; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-title">SIMU5G TOPOT2: HIERARCHICAL 5G MEC HOST SELECTION</div>
+      <div class="brand-sub">Local Edge (mecHost1/2 via I-UPF) vs. Regional/Central Edge (mecHost3 via Anchor UPF)</div>
+    </div>
+    <div class="controls">
+      <button id="btn-joint" class="active" onclick="setPolicy('JOINT')">Load & Latency Policy</button>
+      <button id="btn-local" onclick="setPolicy('LOCAL_ONLY')">Local Edge First</button>
+      <button id="btn-rr" onclick="setPolicy('RR')">Round Robin</button>
+      <button class="btn-ho" onclick="triggerHandover()">X2 Handover (gNB1/gNB2)</button>
+      <button class="btn-burst" onclick="triggerBurst()">Heavy Workload Burst</button>
+      <div class="speed-box">
+        <span>Speed:</span>
+        <input type="range" id="speedRange" min="0.1" max="2.0" step="0.1" value="0.8" oninput="updateSpeed(this.value)">
+        <span id="speedVal">0.8x</span>
+      </div>
+      <button id="btn-pause" onclick="togglePause()">Pause</button>
+      <button onclick="resetSim()">Reset</button>
+      <button class="btn-fs" onclick="toggleFS()">Fullscreen</button>
+    </div>
+  </div>
+
+  <div class="kpi-strip">
+    <div class="kpi">Policy: <b id="kpi-policy">Load & Latency Policy</b></div>
+    <div class="kpi">Active Cell: <b id="kpi-cell">gNodeB 1 (I-UPF 1)</b></div>
+    <div class="kpi">Completed Tasks: <b id="kpi-done">0</b></div>
+    <div class="kpi">Avg E2E Latency: <b id="kpi-lat">0.0 ms</b></div>
+    <div class="kpi">Offload Split (Local / Central): <b id="kpi-split">0% / 0%</b></div>
+  </div>
+
+  <div class="main-area">
+    <div class="canvas-zone" id="canvasZone">
+      <canvas id="simCanvas"></canvas>
+      <div class="legend-bar">
+        <div class="leg-item"><span class="dot" style="background:#a855f7"></span>Control Plane (MEO / UALCMP / UL CL)</div>
+        <div class="leg-item"><span class="dot" style="background:#f59e0b"></span>Uplink Task (UE -> gNB -> I-UPF)</div>
+        <div class="leg-item"><span class="dot" style="background:#10b981"></span>Local Edge Route (mecHost1 / mecHost2)</div>
+        <div class="leg-item"><span class="dot" style="background:#38bdf8"></span>Regional Central Route (N9 -> Anchor UPF -> mecHost3)</div>
+        <div class="leg-item"><span class="dot" style="background:#2dd4bf"></span>Downlink Result Return</div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-header">SIMU5G ORCHESTRATOR & DATA-PLANE LOG</div>
+      <div class="log-list" id="logList"></div>
+      <div class="author-footer">
+        Author: <b>Mai Cuong Tho</b> (thomc@ntu.edu.vn)<br>
+        Simu5G / OMNeT++ TopoT2 Architecture Model
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const zone = document.getElementById('canvasZone');
+
+let W = 1000, H = 600;
+function resize() {
+  W = zone.clientWidth;
+  H = zone.clientHeight - 32;
+  canvas.width = W;
+  canvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Simulation Parameters matching TopoT2.ned
+let policy = 'JOINT';
+let simSpeed = 0.8;
+let paused = false;
+let activeGnb = 1; // 1 for gnb1, 2 for gnb2
+let taskSeq = 0;
+let rrIdx = 0;
+let doneCount = 0;
+let totalLatencyMs = 0;
+let localOffloadCount = 0;
+let centralOffloadCount = 0;
+
+const mecHosts = [
+  { id: 1, name: "mecHost1", role: "Local Edge (I-UPF 1)", cpu: 10000, linkDelayMs: 1.0, queue: [], activeTask: null, activeProg: 0, color: "#10b981" },
+  { id: 2, name: "mecHost2", role: "Local Edge (I-UPF 2)", cpu: 10000, linkDelayMs: 1.0, queue: [], activeTask: null, activeProg: 0, color: "#34d399" },
+  { id: 3, name: "mecHost3", role: "Regional Central (UPF)", cpu: 32000, linkDelayMs: 18.0, queue: [], activeTask: null, activeProg: 0, color: "#38bdf8" }
+];
+
+let packets = [];
+let ctrlSignals = [];
+let spawnTimer = 50;
+let meoDecisionText = "Ready for UE App Request";
+
+function addLog(tag, msg, cls) {
+  const list = document.getElementById('logList');
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + (cls || '');
+  const now = new Date();
+  const ts = now.toTimeString().split(' ')[0];
+  div.innerHTML = `<span class="tag">[${ts}] [${tag}]</span> ${msg}`;
+  list.prepend(div);
+  if (list.children.length > 45) list.removeChild(list.lastChild);
+}
+
+function setPolicy(p) {
+  policy = p;
+  document.getElementById('btn-joint').classList.toggle('active', p === 'JOINT');
+  document.getElementById('btn-local').classList.toggle('active', p === 'LOCAL_ONLY');
+  document.getElementById('btn-rr').classList.toggle('active', p === 'RR');
+  const names = { JOINT: "Load & Latency Policy", LOCAL_ONLY: "Local Edge First", RR: "Round Robin" };
+  document.getElementById('kpi-policy').innerText = names[p];
+  addLog("POLICY", `Switched MEC selection policy to ${names[p]}`, "ctrl");
+}
+
+function triggerHandover() {
+  activeGnb = (activeGnb === 1) ? 2 : 1;
+  document.getElementById('kpi-cell').innerText = activeGnb === 1 ? "gNodeB 1 (I-UPF 1)" : "gNodeB 2 (I-UPF 2)";
+  addLog("X2-HO", `NrUe executed X2 Handover to gNodeB ${activeGnb} (Serving I-UPF ${activeGnb})`, "ho");
+}
+
+function triggerBurst() {
+  addLog("BURST", "Injecting 4 heavy compute tasks to stress Local Edge queues", "ho");
+  for (let i = 0; i < 4; i++) {
+    setTimeout(() => spawnTask(true), i * 250);
+  }
+}
+
+function updateSpeed(val) {
+  simSpeed = parseFloat(val);
+  document.getElementById('speedVal').innerText = simSpeed.toFixed(1) + "x";
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btn-pause').innerText = paused ? "Resume" : "Pause";
+}
+
+function toggleFS() {
+  const el = document.getElementById('app');
+  if (!document.fullscreenElement) el.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+}
+
+function resetSim() {
+  taskSeq = 0; rrIdx = 0; doneCount = 0; totalLatencyMs = 0;
+  localOffloadCount = 0; centralOffloadCount = 0;
+  packets = []; ctrlSignals = [];
+  mecHosts.forEach(h => { h.queue = []; h.activeTask = null; h.activeProg = 0; });
+  document.getElementById('logList').innerHTML = '';
+  updateKPIs();
+  addLog("RESET", "TopoT2 simulation environment reinitialized", "ctrl");
+}
+
+function updateKPIs() {
+  document.getElementById('kpi-done').innerText = doneCount;
+  let avg = doneCount > 0 ? (totalLatencyMs / doneCount).toFixed(1) : "0.0";
+  document.getElementById('kpi-lat').innerText = avg + " ms";
+  let totOff = localOffloadCount + centralOffloadCount;
+  let locPct = totOff > 0 ? Math.round((localOffloadCount / totOff) * 100) : 0;
+  let cenPct = totOff > 0 ? (100 - locPct) : 0;
+  document.getElementById('kpi-split').innerText = `${locPct}% / ${cenPct}%`;
+}
+
+// Node coordinates matching TopoT2 diagram
+function getNodes() {
+  return {
+    meo:    { x: W * 0.22, y: H * 0.13, w: 150, h: 48 },
+    ualcmp: { x: W * 0.40, y: H * 0.13, w: 120, h: 48 },
+    upf:    { x: W * 0.56, y: H * 0.25, w: 135, h: 50 },
+    mec3:   { x: W * 0.84, y: H * 0.25, w: 210, h: 78 },
+    iupf1:  { x: W * 0.40, y: H * 0.48, w: 130, h: 46 },
+    iupf2:  { x: W * 0.72, y: H * 0.48, w: 130, h: 46 },
+    mec1:   { x: W * 0.16, y: H * 0.48, w: 210, h: 78 },
+    mec2:   { x: W * 0.90, y: H * 0.48, w: 175, h: 78 },
+    gnb1:   { x: W * 0.40, y: H * 0.70, w: 125, h: 46 },
+    gnb2:   { x: W * 0.72, y: H * 0.70, w: 125, h: 46 },
+    ue:     { x: W * 0.56, y: H * 0.89, w: 150, h: 46 }
+  };
+}
+
+function getQueuedCpu(host) {
+  let sum = host.queue.reduce((acc, t) => acc + t.cpuReq, 0);
+  if (host.activeTask) sum += host.activeTask.cpuReq * (1 - host.activeProg);
+  return sum;
+}
+
+function evaluateMecSelection(task) {
+  let chosen = mecHosts[0];
+  let bestLatencyMs = Infinity;
+
+  if (policy === 'RR') {
+    chosen = mecHosts[rrIdx % 3];
+    rrIdx++;
+    bestLatencyMs = computeTotalDelayMs(chosen, task);
+    meoDecisionText = `RR -> ${chosen.name} (${bestLatencyMs.toFixed(1)}ms)`;
+  } else if (policy === 'LOCAL_ONLY') {
+    chosen = (activeGnb === 1) ? mecHosts[0] : mecHosts[1];
+    bestLatencyMs = computeTotalDelayMs(chosen, task);
+    meoDecisionText = `Local -> ${chosen.name} (${bestLatencyMs.toFixed(1)}ms)`;
+  } else {
+    // Joint Load & Latency Policy across Local Edge (mecHost1/2) & Regional Edge (mecHost3)
+    mecHosts.forEach(h => {
+      let d = computeTotalDelayMs(h, task);
+      if (d < bestLatencyMs) {
+        bestLatencyMs = d;
+        chosen = h;
+      }
+    });
+    meoDecisionText = `Optimal -> ${chosen.name} (${bestLatencyMs.toFixed(1)}ms)`;
+  }
+
+  if (chosen.id === 3) centralOffloadCount++;
+  else localOffloadCount++;
+
+  return { host: chosen, predictedMs: bestLatencyMs };
+}
+
+function computeTotalDelayMs(host, task) {
+  // 1. Radio 5G NR Uplink + Downlink delay (~4ms base)
+  let radioMs = 4.0 + (task.dataMb * 0.8);
+
+  // 2. Core & Backhaul delay depending on serving gNB & I-UPF path
+  let pathDelayMs = host.linkDelayMs;
+  if (host.id === 1 && activeGnb === 2) pathDelayMs += 8.0; // N9 cross-I-UPF via Anchor UPF
+  if (host.id === 2 && activeGnb === 1) pathDelayMs += 8.0; // N9 cross-I-UPF via Anchor UPF
+  if (host.id === 3) pathDelayMs += 3.0; // N9 uplink to Anchor UPF + 18ms mecHost3LinkDelay
+
+  // 3. Queue wait time + Execution time on MEC Host VIM CPU
+  let queuedCpu = getQueuedCpu(host);
+  let waitMs = (queuedCpu / host.cpu) * 1000.0;
+  let execMs = (task.cpuReq / host.cpu) * 1000.0;
+
+  return radioMs + pathDelayMs + waitMs + execMs;
+}
+
+function spawnTask(isHeavy = false) {
+  taskSeq++;
+  const dataMb = isHeavy ? (Math.floor(Math.random() * 6) + 6) : (Math.floor(Math.random() * 4) + 2);
+  const cpuReq = isHeavy ? (Math.floor(Math.random() * 4000) + 6500) : (Math.floor(Math.random() * 3000) + 2500);
+  const task = { id: taskSeq, dataMb, cpuReq, sourceGnb: activeGnb };
+
+  const decision = evaluateMecSelection(task);
+  const targetHost = decision.host;
+
+  // Trigger Control Plane signaling visual (MEO -> UALCMP -> UPF filterGate)
+  const n = getNodes();
+  ctrlSignals.push({
+    waypoints: [n.meo, n.ualcmp, n.upf],
+    seg: 0, prog: 0, label: `UL-CL Rule T#${task.id}->${targetHost.name}`
+  });
+
+  // Build Data-Plane Waypoints based on TopoT2 links
+  let startGnb = (activeGnb === 1) ? n.gnb1 : n.gnb2;
+  let startIupf = (activeGnb === 1) ? n.iupf1 : n.iupf2;
+  let routePoints = [n.ue, startGnb, startIupf];
+
+  if (targetHost.id === 1) {
+    if (activeGnb === 2) routePoints.push(n.upf, n.iupf1);
+    routePoints.push(n.mec1);
+  } else if (targetHost.id === 2) {
+    if (activeGnb === 1) routePoints.push(n.upf, n.iupf2);
+    routePoints.push(n.mec2);
+  } else {
+    // Route via N9 to Anchor UPF -> mecHost3
+    routePoints.push(n.upf, n.mec3);
+  }
+
+  packets.push({
+    task,
+    targetHost,
+    predictedMs: decision.predictedMs,
+    waypoints: routePoints,
+    seg: 0,
+    prog: 0,
+    isReturn: false
+  });
+
+  const routeType = targetHost.id === 3 ? "CENTRAL (N9->UPF->mecHost3)" : `LOCAL (${targetHost.name})`;
+  const logCls = targetHost.id === 3 ? "central" : "local";
+  addLog("MEO-ROUTE", `Task #${task.id} (${cpuReq} MI) -> <b>${routeType}</b> | Est: ${decision.predictedMs.toFixed(1)}ms`, logCls);
+}
+
+function update() {
+  if (paused) return;
+
+  spawnTimer -= simSpeed;
+  if (spawnTimer <= 0) {
+    spawnTask(false);
+    spawnTimer = 85 + Math.random() * 45;
+  }
+
+  // Update Control Plane signals
+  for (let i = ctrlSignals.length - 1; i >= 0; i--) {
+    let c = ctrlSignals[i];
+    c.prog += 0.045 * simSpeed;
+    if (c.prog >= 1) {
+      c.prog = 0;
+      c.seg++;
+      if (c.seg >= c.waypoints.length - 1) ctrlSignals.splice(i, 1);
+    }
+  }
+
+  // Update Data Plane packets
+  for (let i = packets.length - 1; i >= 0; i--) {
+    let p = packets[i];
+    let step = (p.targetHost.id === 3 && p.seg >= p.waypoints.length - 2) ? 0.022 : 0.032;
+    p.prog += step * simSpeed;
+    if (p.prog >= 1) {
+      p.prog = 0;
+      p.seg++;
+      if (p.seg >= p.waypoints.length - 1) {
+        if (!p.isReturn) {
+          // Arrived at MEC Host VIM queue
+          p.targetHost.queue.push(p);
+          packets.splice(i, 1);
+        } else {
+          // Returned to NrUe
+          doneCount++;
+          totalLatencyMs += p.predictedMs;
+          updateKPIs();
+          addLog("DL-DONE", `Task #${p.task.id} result delivered to NrUe (${p.predictedMs.toFixed(1)}ms)`, "done");
+          packets.splice(i, 1);
+        }
+      }
+    }
+  }
+
+  // Update MEC Host VIM CPU execution
+  const n = getNodes();
+  mecHosts.forEach(h => {
+    if (!h.activeTask && h.queue.length > 0) {
+      h.activeTask = h.queue.shift();
+      h.activeProg = 0;
+    }
+    if (h.activeTask) {
+      let execRate = (h.cpu / h.activeTask.task.cpuReq) * 0.014 * simSpeed;
+      h.activeProg += execRate;
+      if (h.activeProg >= 1) {
+        let finished = h.activeTask;
+        h.activeTask = null;
+        h.activeProg = 0;
+
+        // Create Downlink Return Packet along reverse path
+        let revPoints = [...finished.waypoints].reverse();
+        packets.push({
+          task: finished.task,
+          targetHost: h,
+          predictedMs: finished.predictedMs,
+          waypoints: revPoints,
+          seg: 0,
+          prog: 0,
+          isReturn: true
+        });
+      }
+    }
+  });
+}
+
+function drawBox(node, title, sub, borderCol, fillCol = "#1e293b") {
+  let x = node.x - node.w / 2, y = node.y - node.h / 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, node.w, node.h, 8);
+  ctx.fillStyle = fillCol;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = borderCol;
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText(title, node.x, y + 19);
+  if (sub) {
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10.5px sans-serif";
+    ctx.fillText(sub, node.x, y + 35);
+  }
+}
+
+function drawMecHost(node, host) {
+  let x = node.x - node.w / 2, y = node.y - node.h / 2;
+  let qCount = host.queue.length + (host.activeTask ? 1 : 0);
+  let loadPct = Math.min(100, Math.round((qCount / 4) * 100));
+  let barCol = loadPct >= 75 ? "#ef4444" : (loadPct >= 40 ? "#f59e0b" : host.color);
+
+  ctx.beginPath();
+  ctx.roundRect(x, y, node.w, node.h, 8);
+  ctx.fillStyle = "#1e293b";
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = barCol;
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText(`${host.name} (${host.cpu/1000}k MIPS)`, node.x, y + 17);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`${host.role} | Link: ${host.linkDelayMs}ms`, node.x, y + 31);
+
+  // VIM CPU Execution Progress Bar
+  let bx = x + 12, by = y + 40, bw = node.w - 24, bh = 14;
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(bx, by, bw, bh);
+  if (host.activeTask) {
+    ctx.fillStyle = host.color;
+    ctx.fillRect(bx, by, bw * host.activeProg, bh);
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 9.5px sans-serif";
+    ctx.fillText(`Exec T#${host.activeTask.task.id}: ${Math.round(host.activeProg*100)}%`, node.x, by + 10.5);
+  } else {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "9.5px sans-serif";
+    ctx.fillText("VIM Idle (0% CPU)", node.x, by + 10.5);
+  }
+
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`Wait Queue: ${host.queue.length} tasks`, node.x, y + 68);
+}
+
+function drawLink(a, b, label, dashed = false, col = "#334155") {
+  ctx.save();
+  if (dashed) ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(a.x, a.y);
+  ctx.lineTo(b.x, b.y);
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 1.8;
+  ctx.stroke();
+  ctx.restore();
+
+  if (label) {
+    let mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(label, mx, my - 5);
+  }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const n = getNodes();
+
+  // Horizontal Layer Dividers
+  ctx.strokeStyle = "#1e293b";
+  ctx.lineWidth = 1;
+  [H * 0.19, H * 0.36, H * 0.60, H * 0.80].forEach(ly => {
+    ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke();
+  });
+
+  // Layer Labels
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#475569";
+  ctx.font = "bold 10px sans-serif";
+  ctx.fillText("CONTROL & MANAGEMENT PLANE", 12, H * 0.08);
+  ctx.fillText("5G CORE & REGIONAL CENTRAL EDGE", 12, H * 0.23);
+  ctx.fillText("INTERMEDIATE UPF & LOCAL EDGE", 12, H * 0.40);
+  ctx.fillText("5G NR RADIO ACCESS (RAN)", 12, H * 0.64);
+  ctx.fillText("5G USER EQUIPMENT (UE)", 12, H * 0.84);
+
+  // Draw Topology Links (Matching TopoT2.ned)
+  drawLink(n.meo, n.ualcmp, "LCM", false, "#6b21a8");
+  drawLink(n.ualcmp, n.upf, "filterGate", false, "#6b21a8");
+  drawLink(n.upf, n.iupf1, "N9 (Eth10G)");
+  drawLink(n.upf, n.iupf2, "N9 (Eth10G)");
+  drawLink(n.upf, n.mec3, "18ms (Central)", false, "#0284c7");
+  drawLink(n.iupf1, n.mec1, "1ms (Local)", false, "#059669");
+  drawLink(n.iupf2, n.mec2, "1ms (Local)", false, "#059669");
+  drawLink(n.iupf1, n.gnb1, "N3");
+  drawLink(n.iupf2, n.gnb2, "N3");
+  drawLink(n.gnb1, n.gnb2, "X2 / Xn Interface", true, "#64748b");
+
+  // Wireless 5G NR links
+  drawLink(n.ue, n.gnb1, activeGnb === 1 ? "5G NR Active" : "", activeGnb !== 1, activeGnb === 1 ? "#38bdf8" : "#334155");
+  drawLink(n.ue, n.gnb2, activeGnb === 2 ? "5G NR Active" : "", activeGnb !== 2, activeGnb === 2 ? "#38bdf8" : "#334155");
+
+  // Draw Infrastructure Nodes
+  drawBox(n.meo, "MEC Orchestrator", meoDecisionText, "#a855f7");
+  drawBox(n.ualcmp, "UALCMP", "App Lifecycle Proxy", "#8b5cf6");
+  drawBox(n.upf, "Anchor UPF", "PSA-UPF & UL CL", "#38bdf8");
+  drawBox(n.iupf1, "I-UPF 1", "Local Breakout 1", "#10b981");
+  drawBox(n.iupf2, "I-UPF 2", "Local Breakout 2", "#10b981");
+  drawBox(n.gnb1, "gNodeB 1", "5G NR Cell #1", activeGnb === 1 ? "#38bdf8" : "#475569");
+  drawBox(n.gnb2, "gNodeB 2", "5G NR Cell #2", activeGnb === 2 ? "#38bdf8" : "#475569");
+  drawBox(n.ue, "NrUe (5G Device)", `Connected: gNodeB ${activeGnb}`, "#f59e0b");
+
+  // Draw 3 MEC Hosts
+  drawMecHost(n.mec1, mecHosts[0]);
+  drawMecHost(n.mec2, mecHosts[1]);
+  drawMecHost(n.mec3, mecHosts[2]);
+
+  // Draw Control Plane Signals
+  ctrlSignals.forEach(c => {
+    let a = c.waypoints[c.seg], b = c.waypoints[c.seg + 1];
+    let x = a.x + (b.x - a.x) * c.prog;
+    let y = a.y + (b.y - a.y) * c.prog;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = "#c084fc";
+    ctx.fill();
+  });
+
+  // Draw Data Plane Packets
+  packets.forEach(p => {
+    let a = p.waypoints[p.seg], b = p.waypoints[p.seg + 1];
+    let x = a.x + (b.x - a.x) * p.prog;
+    let y = a.y + (b.y - a.y) * p.prog;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 9.5, 0, Math.PI * 2);
+    ctx.fillStyle = p.isReturn ? "#2dd4bf" : (p.targetHost.id === 3 ? "#38bdf8" : "#10b981");
+    ctx.fill();
+    ctx.strokeStyle = "#0f172a";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#0f172a";
+    ctx.font = "bold 9px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(p.isReturn ? `R${p.task.id}` : `T${p.task.id}`, x, y + 3);
+  });
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+addLog("INIT", "TopoT2 Hierarchical 5G MEC topology loaded (mecHost1, mecHost2, mecHost3)", "ctrl");
+loop();
+</script>
+</body>
+</html>

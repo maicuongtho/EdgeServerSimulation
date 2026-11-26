@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Simu5G TopoT2: Hierarchical MEC Host Selection (V6 - Clean Routing)</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  body, html {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: #0b1120; color: #f1f5f9; overflow: hidden;
+  }
+  #sim-wrapper {
+    width: 100vw; height: 100vh;
+    display: flex; flex-direction: column;
+    background: #0b1120;
+  }
+  .toolbar {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    padding: 9px 18px; background: #111827; border-bottom: 1px solid #1e293b; gap: 10px;
+  }
+  .title-box { display: flex; flex-direction: column; }
+  .title { font-size: 15px; font-weight: 700; color: #38bdf8; letter-spacing: 0.3px; }
+  .subtitle { font-size: 11px; color: #94a3b8; }
+  .controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+  button {
+    padding: 6px 11px; border: 1px solid #334155; border-radius: 6px;
+    background: #1e293b; color: #e2e8f0; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  button:hover { background: #334155; }
+  button.active { background: #0284c7; border-color: #38bdf8; color: #ffffff; }
+  button.btn-ho { background: #4c1d95; border-color: #8b5cf6; color: #ede9fe; }
+  button.btn-ho:hover { background: #5b21b6; }
+  button.btn-lcm { background: #065f46; border-color: #10b981; color: #d1fae5; }
+  button.btn-lcm:hover { background: #047857; }
+  button.btn-burst { background: #991b1b; border-color: #ef4444; color: #fee2e2; }
+  button.btn-burst:hover { background: #b91c1c; }
+  button.btn-fs { background: #10b981; border-color: #34d399; color: #022c22; }
+  
+  .speed-control {
+    display: flex; align-items: center; gap: 6px;
+    background: #1e293b; padding: 4px 10px; border-radius: 6px; border: 1px solid #334155;
+    font-size: 12px; color: #cbd5e1;
+  }
+  .speed-control input[type=range] { width: 75px; cursor: pointer; accent-color: #38bdf8; }
+  .speed-val { font-weight: 700; color: #38bdf8; min-width: 30px; }
+
+  .stats-bar {
+    display: flex; justify-content: space-around; align-items: center;
+    background: #0f172a; padding: 6px 14px; font-size: 12px;
+    border-bottom: 1px solid #1e293b; color: #94a3b8;
+  }
+  .stat-item span { font-weight: 700; color: #38bdf8; font-size: 13px; margin-left: 3px; }
+  .stat-item span.warn { color: #fbbf24; }
+  .stat-item span.good { color: #34d399; }
+
+  .main-body { flex: 1; display: flex; overflow: hidden; }
+  .canvas-zone { flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0; }
+  #canvas-container { flex: 1; position: relative; width: 100%; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .legend-bar {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px;
+    padding: 6px 14px; background: #111827; border-top: 1px solid #1e293b;
+    font-size: 11px; color: #cbd5e1;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .line-sample { width: 20px; height: 2px; display: inline-block; }
+
+  .sidebar {
+    width: 340px; background: #111827; border-left: 1px solid #1e293b;
+    display: flex; flex-direction: column;
+  }
+  .chart-panel {
+    padding: 8px 12px; border-bottom: 1px solid #1e293b; background: #0f172a;
+  }
+  .chart-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    margin-bottom: 5px; gap: 6px;
+  }
+  .chart-title-wrap { display: flex; flex-direction: column; }
+  .chart-title { font-size: 11px; font-weight: 700; color: #e2e8f0; letter-spacing: 0.3px; }
+  .chart-sub { font-size: 9.5px; color: #64748b; margin-top: 1px; }
+  .chart-metrics {
+    display: flex; flex-direction: column; align-items: flex-end;
+    font-size: 10.5px; font-weight: 700; line-height: 1.3; white-space: nowrap;
+  }
+  #telemetryChart {
+    width: 100%; height: 95px; background: #0b1120; border: 1px solid #1e293b; border-radius: 6px;
+  }
+  .sidebar-header {
+    padding: 8px 14px; background: #1e293b; border-bottom: 1px solid #334155;
+    font-size: 11px; font-weight: 700; color: #38bdf8;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .log-list {
+    flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px;
+    font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;
+  }
+  .log-entry {
+    padding: 6px 8px; border-radius: 5px; background: #0f172a;
+    border-left: 3px solid #475569; line-height: 1.35; color: #cbd5e1;
+  }
+  .log-entry.lcm { border-left-color: #a855f7; }
+  .log-entry.data { border-left-color: #38bdf8; }
+  .log-entry.done { border-left-color: #10b981; }
+  .log-entry.ho { border-left-color: #f59e0b; }
+  .log-entry.fallback { border-left-color: #ef4444; }
+  .log-time { color: #64748b; font-size: 10px; }
+  .tag { font-weight: 700; padding: 1px 4px; border-radius: 3px; font-size: 10px; }
+  .tag-lcm { background: #3b0764; color: #e9d5ff; }
+  .tag-data { background: #0c4a6e; color: #bae6fd; }
+  .tag-done { background: #064e3b; color: #a7f3d0; }
+  .tag-ho { background: #451a03; color: #fde68a; }
+  .tag-fb { background: #450a0a; color: #fecaca; }
+
+  .author-footer {
+    padding: 8px 14px; background: #0f172a; border-top: 1px solid #1e293b;
+    font-size: 11px; color: #94a3b8; text-align: center;
+  }
+  .author-footer strong { color: #38bdf8; }
+</style>
+</head>
+<body>
+
+<div id="sim-wrapper">
+  <div class="toolbar">
+    <div class="title-box">
+      <div class="title">Simu5G TopoT2: Hierarchical MEC Host Selection (Clean Routing V6)</div>
+      <div class="subtitle">Control Plane (LCM Session Binding via ualcmp) vs. User Plane (Local Breakout via iUpf / Anchor upf)</div>
+    </div>
+    <div class="controls">
+      <button id="btn-smart" class="active" onclick="setPolicy('SMART')">Load & Latency Aware</button>
+      <button id="btn-local" onclick="setPolicy('LOCAL')">Local Edge Only</button>
+      <button id="btn-rr" onclick="setPolicy('RR')">Round Robin</button>
+      <button class="btn-lcm" onclick="triggerReOrchestration()">Re-Orchestrate (LCM)</button>
+      <button class="btn-ho" onclick="triggerHandover()">X2 Handover</button>
+      <button class="btn-burst" onclick="triggerBurst()">+ Burst Traffic</button>
+      <div class="speed-control">
+        <span>Speed:</span>
+        <input type="range" id="speedSlider" min="0.1" max="2.0" step="0.1" value="0.8" oninput="updateSpeed(this.value)">
+        <span class="speed-val" id="speedVal">0.8x</span>
+      </div>
+      <button id="btn-pause" onclick="togglePause()">Pause</button>
+      <button onclick="resetSim()">Reset</button>
+      <button class="btn-fs" onclick="toggleFullscreen()">Fullscreen</button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">Policy:<span id="lbl-policy">Load & Latency Aware</span></div>
+    <div class="stat-item">Offloaded:<span id="lbl-completed" class="good">0</span></div>
+    <div class="stat-item">UE Local Fallback:<span id="lbl-fallback" class="warn">0</span></div>
+    <div class="stat-item">E2E Latency:<span id="lbl-latency">0.0 ms</span></div>
+    <div class="stat-item">Cluster CPU:<span id="lbl-cpu">0%</span></div>
+  </div>
+
+  <div class="main-body">
+    <div class="canvas-zone">
+      <div id="canvas-container">
+        <canvas id="simCanvas"></canvas>
+      </div>
+      <div class="legend-bar">
+        <div class="legend-item"><span class="dot" style="background:#a855f7;"></span>LCM Control Plane (Session Setup via ualcmp)</div>
+        <div class="legend-item"><span class="dot" style="background:#38bdf8;"></span>User-Plane Offload (Direct to Bound MecHost)</div>
+        <div class="legend-item"><span class="dot" style="background:#10b981;"></span>Downlink Result Return</div>
+        <div class="legend-item"><span class="dot" style="background:#ef4444;"></span>UE Local Fallback (Edge Saturated)</div>
+        <div class="legend-item"><span class="line-sample" style="border-top:2px dashed #a855f7;"></span>Control / X2 Link</div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="chart-panel">
+        <div class="chart-header">
+          <div class="chart-title-wrap">
+            <span class="chart-title">AVG SYSTEM LATENCY & CLUSTER CPU LOAD</span>
+            <span class="chart-sub">Real-time E2E Delay (ms) vs. 3-Host Mean CPU (%)</span>
+          </div>
+          <div class="chart-metrics">
+            <span id="chart-lat-val" style="color:#38bdf8;">Lat: 0.0ms</span>
+            <span id="chart-cpu-val" style="color:#fbbf24;">CPU: 0%</span>
+          </div>
+        </div>
+        <canvas id="telemetryChart"></canvas>
+      </div>
+
+      <div class="sidebar-header">
+        <span>SIMU5G EVENT & LCM LOG</span>
+        <span style="font-size:10px; color:#94a3b8;">TopoT2.ned</span>
+      </div>
+      <div class="log-list" id="logList"></div>
+      <div class="author-footer">
+        Author: <strong>Mai Cường Thọ</strong> (thomc@ntu.edu.vn)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+
+const chartCanvas = document.getElementById('telemetryChart');
+const chartCtx = chartCanvas.getContext('2d');
+
+let width = 1000, height = 650;
+function resizeCanvas() {
+  width = container.clientWidth || 1000;
+  height = container.clientHeight || 650;
+  canvas.width = width;
+  canvas.height = height;
+
+  chartCanvas.width = chartCanvas.clientWidth || 310;
+  chartCanvas.height = 95;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+let policy = 'SMART';
+let simSpeed = 0.8;
+let paused = false;
+let taskCounter = 0;
+let completedTasks = 0;
+let fallbackTasks = 0;
+let totalLatencyMs = 0;
+let rrCounter = 0;
+let simSeconds = 0;
+
+let latHistory = [];
+let cpuHistory = [];
+
+// TopoT2.ned Modules
+const ues = [
+  { id: 0, name: "ue[0]", desc: "5G V2X Car", gnb: 0, radioMbps: 350, boundHost: -1, lcmPending: false, localExecTimer: 0, timer: 45 },
+  { id: 1, name: "ue[1]", desc: "5G AR Glass", gnb: 0, radioMbps: 420, boundHost: -1, lcmPending: false, localExecTimer: 0, timer: 110 },
+  { id: 2, name: "ue[2]", desc: "5G Camera", gnb: 1, radioMbps: 380, boundHost: -1, lcmPending: false, localExecTimer: 0, timer: 170 }
+];
+
+const gnbs = [
+  { id: 0, name: "gnb1", sub: "gNodeB (Cell 1)" },
+  { id: 1, name: "gnb2", sub: "gNodeB (Cell 2)" }
+];
+
+const mecHosts = [
+  { id: 0, name: "mecHost1", tier: "Local Edge (iUpf1)", cpuMax: 10000, linkDelayMs: 1, queue: 0, maxQueue: 180, activeTask: null, color: "#38bdf8" },
+  { id: 1, name: "mecHost2", tier: "Local Edge (iUpf2)", cpuMax: 10000, linkDelayMs: 1, queue: 0, maxQueue: 180, activeTask: null, color: "#34d399" },
+  { id: 2, name: "mecHost3", tier: "Regional Edge (upf)", cpuMax: 32000, linkDelayMs: 18, queue: 0, maxQueue: 420, activeTask: null, color: "#fbbf24" }
+];
+
+const orchestratorState = {
+  scores: [0, 0, 0],
+  lastDecision: "Awaiting DeviceApp LCM request..."
+};
+
+let lcmPackets = [];
+let userPackets = [];
+let handoverFlash = 0;
+
+function addLog(type, tag, msg) {
+  const list = document.getElementById('logList');
+  const div = document.createElement('div');
+  div.className = `log-entry ${type}`;
+  const tStr = `t=${simSeconds.toFixed(1)}s`;
+  div.innerHTML = `<span class="log-time">[${tStr}]</span> <span class="tag tag-${type === 'fallback' ? 'fb' : type}">${tag}</span> ${msg}`;
+  list.insertBefore(div, list.firstChild);
+  if (list.children.length > 45) list.removeChild(list.lastChild);
+}
+
+function updateSpeed(val) {
+  simSpeed = parseFloat(val);
+  document.getElementById('speedVal').innerText = simSpeed.toFixed(1) + "x";
+}
+
+function setPolicy(p) {
+  policy = p;
+  document.getElementById('btn-smart').classList.toggle('active', p === 'SMART');
+  document.getElementById('btn-local').classList.toggle('active', p === 'LOCAL');
+  document.getElementById('btn-rr').classList.toggle('active', p === 'RR');
+  const names = { 'SMART': 'Load & Latency Aware', 'LOCAL': 'Local Edge Only', 'RR': 'Round Robin' };
+  document.getElementById('lbl-policy').innerText = names[p];
+  addLog('lcm', 'POLICY', `Switched policy to <b>${names[p]}</b>. Re-binding UE sessions...`);
+  triggerReOrchestration();
+}
+
+function triggerReOrchestration() {
+  ues.forEach(u => {
+    u.boundHost = -1;
+    u.lcmPending = false;
+  });
+}
+
+function triggerHandover() {
+  const u = ues[0];
+  const oldGnb = u.gnb;
+  u.gnb = (u.gnb === 0) ? 1 : 0;
+  handoverFlash = 45;
+  addLog('ho', 'X2-HO', `<b>${u.name}</b> handed over from <b>${gnbs[oldGnb].name}</b> to <b>${gnbs[u.gnb].name}</b> via x2++.`);
+  if (policy === 'SMART' || policy === 'LOCAL') {
+    u.boundHost = -1;
+    u.lcmPending = false;
+    addLog('lcm', 'MIGRATE', `Triggering LCM re-orchestration for <b>${u.name}</b> after X2 Handover.`);
+  }
+}
+
+function triggerBurst() {
+  addLog('ho', 'BURST', `Injecting high-load burst across UEs to test Admission Control & Regional Offload.`);
+  ues.forEach((u, idx) => {
+    if (u.boundHost !== -1) {
+      for (let k = 0; k < 2; k++) {
+        spawnUserTask(u, 12 + k * 4, 55 + idx * 10);
+      }
+    } else {
+      u.timer = 2;
+    }
+  });
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btn-pause').innerText = paused ? "Resume" : "Pause";
+}
+
+function resetSim() {
+  taskCounter = 0; completedTasks = 0; fallbackTasks = 0; totalLatencyMs = 0; rrCounter = 0; simSeconds = 0;
+  latHistory = []; cpuHistory = [];
+  lcmPackets = []; userPackets = [];
+  ues.forEach((u, i) => {
+    u.gnb = (i === 2) ? 1 : 0;
+    u.boundHost = -1;
+    u.lcmPending = false;
+    u.localExecTimer = 0;
+    u.timer = 25 + i * 40;
+  });
+  mecHosts.forEach(h => { h.queue = 0; h.activeTask = null; });
+  orchestratorState.scores = [0, 0, 0];
+  orchestratorState.lastDecision = "System reset. Waiting for LCM...";
+  document.getElementById('logList').innerHTML = "";
+  addLog('lcm', 'INIT', `Initialized Simu5G TopoT2 (Clean Routing Layout).`);
+  updateStats();
+}
+
+function getLayout() {
+  // Adjusted vertical spacing so Anchor UPF sits cleanly in the middle corridor without overlapping any links
+  const yCtrl = height * 0.13;   // Control Plane: mecOrchestrator & ualcmp
+  const yCore = height * 0.31;   // Anchor UPF (upf) & Regional mecHost3
+  const yIUpf = height * 0.51;   // Intermediate UPFs (iUpf1, iUpf2) & Local mecHost1, mecHost2
+  const yGnb  = height * 0.71;   // gNodeBs (gnb1, gnb2)
+  const yUe   = height * 0.89;   // User Equipments (ue[0..2])
+
+  const xLeftHost  = width * 0.13;
+  const xLeftCore  = width * 0.34;
+  const xCenter    = width * 0.50;
+  const xRightCore = width * 0.66;
+  const xRightHost = width * 0.86;
+
+  return {
+    orch:  { x: xLeftCore - 40, y: yCtrl, w: 165, h: 66 },
+    ualcmp:{ x: xRightCore - 20, y: yCtrl, w: 140, h: 56 },
+    upf:   { x: xCenter, y: yCore, w: 120, h: 48 },
+    iUpf:  [ { x: xLeftCore, y: yIUpf, w: 105, h: 42 }, { x: xRightCore, y: yIUpf, w: 105, h: 42 } ],
+    gnb:   [ { x: xLeftCore, y: yGnb, w: 115, h: 46 }, { x: xRightCore, y: yGnb, w: 115, h: 46 } ],
+    hosts: [
+      { x: xLeftHost,  y: yIUpf, w: 175, h: 90 }, // mecHost1
+      { x: xRightHost, y: yIUpf, w: 175, h: 90 }, // mecHost2
+      { x: xRightHost, y: yCore, w: 185, h: 90 }  // mecHost3
+    ],
+    uePos: [
+      { x: width * 0.25, y: yUe },
+      { x: width * 0.50, y: yUe },
+      { x: width * 0.75, y: yUe }
+    ]
+  };
+}
+
+function selectHostForSession(ue) {
+  let chosen = 0;
+  if (policy === 'RR') {
+    chosen = rrCounter % 3;
+    rrCounter++;
+    orchestratorState.scores = [0, 0, 0];
+    orchestratorState.lastDecision = `RoundRobin -> Bound ${ue.name} to ${mecHosts[chosen].name}`;
+    return chosen;
+  }
+
+  let bestScore = Infinity;
+  mecHosts.forEach((h, idx) => {
+    let totalWork = h.queue + (h.activeTask ? h.activeTask.remC : 0);
+    let loadRatio = Math.min(1.5, totalWork / h.maxQueue);
+
+    let pathDelayMs = h.linkDelayMs;
+    if (idx === 0 && ue.gnb !== 0) pathDelayMs += 8;
+    if (idx === 1 && ue.gnb !== 1) pathDelayMs += 8;
+    if (idx === 2) pathDelayMs += 4;
+
+    if (policy === 'LOCAL' && idx === 2) {
+      orchestratorState.scores[idx] = 9.99;
+      return;
+    }
+
+    let normLatency = (pathDelayMs + (45 / (h.cpuMax / 1000))) / 50.0;
+    let score = 0.55 * normLatency + 0.45 * loadRatio;
+    orchestratorState.scores[idx] = score;
+
+    if (score < bestScore) {
+      bestScore = score;
+      chosen = idx;
+    }
+  });
+
+  orchestratorState.lastDecision = `Bound ${ue.name} -> ${mecHosts[chosen].name} (Score: ${bestScore.toFixed(2)})`;
+  return chosen;
+}
+
+function buildUserPlaneWaypoints(ue, hostIdx, isReturn) {
+  const L = getLayout();
+  const uPt = L.uePos[ue.id];
+  const gPt = L.gnb[ue.gnb];
+  const iPt = L.iUpf[ue.gnb];
+  const upfPt = L.upf;
+  const hPt = L.hosts[hostIdx];
+
+  // Clean orthogonal/direct corridor paths that pass cleanly through node centers
+  let pts = [
+    { x: uPt.x, y: uPt.y - 20 },
+    { x: gPt.x, y: gPt.y + 23 },
+    { x: iPt.x, y: iPt.y + 21 }
+  ];
+
+  if (hostIdx === 0 && ue.gnb === 0) {
+    pts.push({ x: iPt.x - 52, y: iPt.y });
+    pts.push({ x: hPt.x + 88, y: hPt.y });
+  } else if (hostIdx === 1 && ue.gnb === 1) {
+    pts.push({ x: iPt.x + 52, y: iPt.y });
+    pts.push({ x: hPt.x - 88, y: hPt.y });
+  } else if (hostIdx === 2) {
+    // Clean corridor: iUpf -> Anchor upf -> mecHost3
+    pts.push({ x: iPt.x, y: iPt.y - 21 });
+    pts.push({ x: upfPt.x, y: upfPt.y + 24 });
+    pts.push({ x: upfPt.x + 60, y: upfPt.y });
+    pts.push({ x: hPt.x - 92, y: hPt.y });
+  } else {
+    // Cross-site via Anchor UPF
+    const targetIUpf = L.iUpf[hostIdx];
+    pts.push({ x: iPt.x, y: iPt.y - 21 });
+    pts.push({ x: upfPt.x, y: upfPt.y + 24 });
+    pts.push({ x: targetIUpf.x, y: targetIUpf.y - 21 });
+    pts.push({ x: hPt.x + (hostIdx === 0 ? 88 : -88), y: hPt.y });
+  }
+
+  return isReturn ? pts.reverse() : pts;
+}
+
+function buildLcmWaypoints(ue) {
+  const L = getLayout();
+  const uPt = L.uePos[ue.id];
+  const gPt = L.gnb[ue.gnb];
+  const iPt = L.iUpf[ue.gnb];
+  const upfPt = L.upf;
+  const ualPt = L.ualcmp;
+  const orchPt = L.orch;
+
+  // Clean path through upf.filterGate (top of upf) to ualcmp and mecOrchestrator
+  return [
+    { x: uPt.x, y: uPt.y - 20 },
+    { x: gPt.x, y: gPt.y + 23 },
+    { x: iPt.x, y: iPt.y - 21 },
+    { x: upfPt.x, y: upfPt.y - 24 },
+    { x: ualPt.x, y: ualPt.y + 28 },
+    { x: orchPt.x + 82, y: orchPt.y }
+  ];
+}
+
+function spawnUserTask(ue, dMB, cMcycles) {
+  const hIdx = ue.boundHost;
+  if (hIdx < 0 || hIdx >= mecHosts.length) return;
+  const host = mecHosts[hIdx];
+
+  if (host.queue + cMcycles > host.maxQueue) {
+    fallbackTasks++;
+    ue.localExecTimer = 50;
+    addLog('fallback', 'FALLBACK', `<b>${host.name}</b> saturated (Queue full)! <b>${ue.name}</b> executing Task locally.`);
+    updateStats();
+    return;
+  }
+
+  taskCounter++;
+  const radioMs = (dMB * 8 / ue.radioMbps) * 1000;
+  const backhaulMs = host.linkDelayMs + (hIdx === 2 ? 4 : (hIdx !== ue.gnb ? 8 : 0));
+  const execMs = (cMcycles / (host.cpuMax / 1000)) * 22;
+  const totalEstMs = radioMs + backhaulMs + execMs + (host.queue / (host.cpuMax / 1000)) * 18;
+
+  userPackets.push({
+    id: taskCounter,
+    ueId: ue.id,
+    hostIdx: hIdx,
+    D: dMB,
+    C: cMcycles,
+    estLatencyMs: totalEstMs,
+    isReturn: false,
+    waypoints: buildUserPlaneWaypoints(ue, hIdx, false),
+    seg: 0,
+    segProgress: 0
+  });
+}
+
+function update() {
+  if (paused) return;
+  simSeconds += 0.016 * simSpeed;
+  if (handoverFlash > 0) handoverFlash--;
+
+  mecHosts.forEach(h => {
+    if (!h.activeTask && h.queue > 0) {
+      let chunk = Math.min(h.queue, 45);
+      h.queue -= chunk;
+      h.activeTask = { id: taskCounter, C: chunk, remC: chunk, ueId: 0, estLatencyMs: 25 };
+    }
+    if (h.activeTask) {
+      let drain = (h.cpuMax / 1000) * 0.045 * simSpeed;
+      h.activeTask.remC -= drain;
+      if (h.activeTask.remC <= 0) {
+        let done = h.activeTask;
+        h.activeTask = null;
+        if (done.realTask) {
+          userPackets.push({
+            id: done.id,
+            ueId: done.ueId,
+            hostIdx: h.id,
+            estLatencyMs: done.estLatencyMs,
+            isReturn: true,
+            waypoints: buildUserPlaneWaypoints(ues[done.ueId], h.id, true),
+            seg: 0,
+            segProgress: 0
+          });
+        }
+      }
+    }
+  });
+
+  ues.forEach(u => {
+    if (u.localExecTimer > 0) u.localExecTimer -= simSpeed;
+    u.timer -= simSpeed;
+
+    if (u.timer <= 0) {
+      if (u.boundHost === -1 && !u.lcmPending) {
+        u.lcmPending = true;
+        lcmPackets.push({
+          ueId: u.id,
+          waypoints: buildLcmWaypoints(u),
+          seg: 0,
+          segProgress: 0
+        });
+        addLog('lcm', 'LCM-REQ', `<b>${u.name}</b> sent App Instantiation Request via <b>upf.filterGate -> ualcmp</b>.`);
+        u.timer = 90;
+      } else if (u.boundHost !== -1) {
+        let d = Math.floor(Math.random() * 8) + 4;
+        let c = Math.floor(Math.random() * 35) + 25;
+        spawnUserTask(u, d, c);
+        u.timer = Math.floor(Math.random() * 65) + 65;
+      } else {
+        u.timer = 40;
+      }
+    }
+  });
+
+  for (let i = lcmPackets.length - 1; i >= 0; i--) {
+    let p = lcmPackets[i];
+    p.segProgress += 0.045 * simSpeed;
+    if (p.segProgress >= 1) {
+      p.seg++;
+      p.segProgress = 0;
+      if (p.seg >= p.waypoints.length - 1) {
+        let u = ues[p.ueId];
+        let chosen = selectHostForSession(u);
+        u.boundHost = chosen;
+        u.lcmPending = false;
+        addLog('lcm', 'BOUND', `<b>mecOrchestrator</b> bound <b>${u.name}</b> session to <b>${mecHosts[chosen].name}</b>.`);
+        lcmPackets.splice(i, 1);
+      }
+    }
+  }
+
+  for (let i = userPackets.length - 1; i >= 0; i--) {
+    let p = userPackets[i];
+    let step = (p.hostIdx === 2 && p.seg >= 2) ? 0.032 : 0.048;
+    p.segProgress += step * simSpeed;
+
+    if (p.segProgress >= 1) {
+      p.seg++;
+      p.segProgress = 0;
+      if (p.seg >= p.waypoints.length - 1) {
+        if (!p.isReturn) {
+          let h = mecHosts[p.hostIdx];
+          if (!h.activeTask) {
+            h.activeTask = { id: p.id, C: p.C, remC: p.C, ueId: p.ueId, estLatencyMs: p.estLatencyMs, realTask: true };
+          } else if (h.queue + p.C <= h.maxQueue) {
+            h.queue += p.C;
+            h.activeTask.realTask = true;
+            h.activeTask.ueId = p.ueId;
+            h.activeTask.estLatencyMs = p.estLatencyMs;
+          } else {
+            fallbackTasks++;
+            ues[p.ueId].localExecTimer = 45;
+            addLog('fallback', 'OVERFLOW', `<b>${h.name}</b> queue full on arrival! <b>${ues[p.ueId].name}</b> local fallback.`);
+          }
+        } else {
+          completedTasks++;
+          totalLatencyMs += p.estLatencyMs;
+          if (completedTasks % 3 === 0) {
+            addLog('done', 'DONE', `Task #${p.id} result returned to <b>${ues[p.ueId].name}</b> (E2E: ${p.estLatencyMs.toFixed(1)}ms).`);
+          }
+          updateStats();
+        }
+        userPackets.splice(i, 1);
+      }
+    }
+  }
+
+  if (Math.floor(simSeconds * 60) % 20 === 0) {
+    let avgLat = completedTasks > 0 ? (totalLatencyMs / completedTasks) : 0;
+    let avgCpu = mecHosts.reduce((acc, h) => {
+      let load = (h.queue + (h.activeTask ? h.activeTask.remC : 0)) / h.maxQueue;
+      return acc + Math.min(100, load * 100);
+    }, 0) / mecHosts.length;
+
+    latHistory.push(avgLat);
+    cpuHistory.push(avgCpu);
+    if (latHistory.length > 50) { latHistory.shift(); cpuHistory.shift(); }
+
+    document.getElementById('lbl-cpu').innerText = Math.round(avgCpu) + "%";
+    document.getElementById('chart-lat-val').innerText = `Lat: ${avgLat.toFixed(1)}ms`;
+    document.getElementById('chart-cpu-val').innerText = `CPU: ${Math.round(avgCpu)}%`;
+    drawTelemetryChart();
+  }
+}
+
+function updateStats() {
+  document.getElementById('lbl-completed').innerText = completedTasks;
+  document.getElementById('lbl-fallback').innerText = fallbackTasks;
+  let avgLat = completedTasks > 0 ? (totalLatencyMs / completedTasks).toFixed(1) : "0.0";
+  document.getElementById('lbl-latency').innerText = avgLat + " ms";
+}
+
+function drawTelemetryChart() {
+  const cw = chartCanvas.width;
+  const ch = chartCanvas.height;
+  chartCtx.clearRect(0, 0, cw, ch);
+
+  chartCtx.strokeStyle = "#1e293b";
+  chartCtx.lineWidth = 1;
+  [0.25, 0.5, 0.75].forEach(r => {
+    chartCtx.beginPath();
+    chartCtx.moveTo(0, ch * r);
+    chartCtx.lineTo(cw, ch * r);
+    chartCtx.stroke();
+  });
+
+  if (latHistory.length < 2) return;
+
+  chartCtx.strokeStyle = "#38bdf8";
+  chartCtx.lineWidth = 1.8;
+  chartCtx.beginPath();
+  latHistory.forEach((v, idx) => {
+    let x = (idx / 49) * cw;
+    let y = ch - Math.min(1, v / 90) * (ch - 14) - 7;
+    if (idx === 0) chartCtx.moveTo(x, y); else chartCtx.lineTo(x, y);
+  });
+  chartCtx.stroke();
+
+  chartCtx.strokeStyle = "#fbbf24";
+  chartCtx.lineWidth = 1.8;
+  chartCtx.beginPath();
+  cpuHistory.forEach((v, idx) => {
+    let x = (idx / 49) * cw;
+    let y = ch - (v / 100) * (ch - 14) - 7;
+    if (idx === 0) chartCtx.moveTo(x, y); else chartCtx.lineTo(x, y);
+  });
+  chartCtx.stroke();
+}
+
+function drawBox(x, y, w, h, r, fill, stroke, lineWidth = 1.8) {
+  ctx.beginPath();
+  ctx.roundRect(x - w/2, y - h/2, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, width, height);
+  const L = getLayout();
+
+  // Horizontal Layer Dividers (placed strictly between tiers so no module box overlaps them)
+  const bandYs = [
+    (L.orch.y + L.upf.y) / 2,
+    (L.upf.y + L.iUpf[0].y) / 2,
+    (L.iUpf[0].y + L.gnb[0].y) / 2,
+    (L.gnb[0].y + L.uePos[0].y) / 2
+  ];
+  ctx.strokeStyle = "#1e293b";
+  ctx.lineWidth = 1;
+  bandYs.forEach(by => {
+    ctx.beginPath();
+    ctx.moveTo(15, by);
+    ctx.lineTo(width - 15, by);
+    ctx.stroke();
+  });
+
+  // Left Tier Labels
+  ctx.fillStyle = "#64748b";
+  ctx.font = "bold 10px sans-serif";
+  ctx.textAlign = "left";
+  ctx.fillText("CONTROL PLANE (ETSI MEC)", 16, L.orch.y - 26);
+  ctx.fillText("5G CORE & REGIONAL EDGE", 16, L.upf.y - 26);
+  ctx.fillText("LOCAL EDGE & I-UPF", 16, L.iUpf[0].y - 34);
+  ctx.fillText("5G NR RAN (gNodeB)", 16, L.gnb[0].y - 24);
+  ctx.fillText("USER EQUIPMENT (NrUe)", 16, L.uePos[0].y - 22);
+
+  // 1. Control Plane Links (Dashed Purple)
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = "#7e22ce";
+  ctx.lineWidth = 1.6;
+  // mecOrchestrator <-> ualcmp
+  ctx.beginPath();
+  ctx.moveTo(L.orch.x + L.orch.w/2, L.orch.y);
+  ctx.lineTo(L.ualcmp.x - L.ualcmp.w/2, L.ualcmp.y);
+  ctx.stroke();
+
+  // ualcmp <-> upf.filterGate (vertical drop to top of upf)
+  ctx.beginPath();
+  ctx.moveTo(L.ualcmp.x, L.ualcmp.y + L.ualcmp.h/2);
+  ctx.lineTo(L.ualcmp.x, (L.ualcmp.y + L.upf.y)/2);
+  ctx.lineTo(L.upf.x, (L.ualcmp.y + L.upf.y)/2);
+  ctx.lineTo(L.upf.x, L.upf.y - L.upf.h/2);
+  ctx.stroke();
+
+  // X2 interface between gnb1 and gnb2
+  ctx.strokeStyle = handoverFlash > 0 ? "#fbbf24" : "#475569";
+  ctx.lineWidth = handoverFlash > 0 ? 2.8 : 1.5;
+  ctx.beginPath();
+  ctx.moveTo(L.gnb[0].x + L.gnb[0].w/2, L.gnb[0].y);
+  ctx.lineTo(L.gnb[1].x - L.gnb[1].w/2, L.gnb[1].y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("x2++ (Eth10G)", (L.gnb[0].x + L.gnb[1].x)/2, L.gnb[0].y - 7);
+  ctx.fillStyle = "#c084fc";
+  ctx.fillText("filterGate (Eth10G)", L.upf.x + 56, L.upf.y - L.upf.h/2 - 7);
+
+  // 2. Data Plane Links (Solid Eth10G)
+  ctx.strokeStyle = "#334155";
+  ctx.lineWidth = 2.2;
+
+  // upf (bottom/sides) <-> iUpf1 & iUpf2 (cleanly routed outside Anchor UPF box)
+  [0, 1].forEach(idx => {
+    ctx.beginPath();
+    ctx.moveTo(L.upf.x + (idx === 0 ? -30 : 30), L.upf.y + L.upf.h/2);
+    ctx.lineTo(L.iUpf[idx].x, L.iUpf[idx].y - L.iUpf[idx].h/2);
+    ctx.stroke();
+
+    // iUpf <-> gnb
+    ctx.beginPath();
+    ctx.moveTo(L.iUpf[idx].x, L.iUpf[idx].y + L.iUpf[idx].h/2);
+    ctx.lineTo(L.gnb[idx].x, L.gnb[idx].y - L.gnb[idx].h/2);
+    ctx.stroke();
+  });
+
+  // iUpf1 <-> mecHost1 & iUpf2 <-> mecHost2
+  ctx.beginPath();
+  ctx.moveTo(L.iUpf[0].x - L.iUpf[0].w/2, L.iUpf[0].y);
+  ctx.lineTo(L.hosts[0].x + L.hosts[0].w/2, L.hosts[0].y);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(L.iUpf[1].x + L.iUpf[1].w/2, L.iUpf[1].y);
+  ctx.lineTo(L.hosts[1].x - L.hosts[1].w/2, L.hosts[1].y);
+  ctx.stroke();
+
+  // upf (right side) <-> mecHost3 (Regional Edge) - completely unobstructed horizontal corridor
+  ctx.beginPath();
+  ctx.moveTo(L.upf.x + L.upf.w/2, L.upf.y);
+  ctx.lineTo(L.hosts[2].x - L.hosts[2].w/2, L.hosts[2].y);
+  ctx.stroke();
+
+  // Link Delay Labels placed cleanly beside links
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.fillText("mecHost1LinkDelay (1ms)", (L.iUpf[0].x - L.iUpf[0].w/2 + L.hosts[0].x + L.hosts[0].w/2)/2, L.iUpf[0].y - 8);
+  ctx.fillText("mecHost2LinkDelay (1ms)", (L.iUpf[1].x + L.iUpf[1].w/2 + L.hosts[1].x - L.hosts[1].w/2)/2, L.iUpf[1].y - 8);
+  ctx.fillStyle = "#fbbf24";
+  ctx.fillText("mecHost3LinkDelay (18ms)", (L.upf.x + L.upf.w/2 + L.hosts[2].x - L.hosts[2].w/2)/2, L.upf.y - 8);
+
+  // 5G NR Wireless links (UEs to attached gNB)
+  ues.forEach((u, idx) => {
+    const uPt = L.uePos[idx];
+    const gPt = L.gnb[u.gnb];
+    ctx.setLineDash([3, 3]);
+    ctx.strokeStyle = "#0284c7";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(uPt.x, uPt.y - 20);
+    ctx.lineTo(gPt.x, gPt.y + L.gnb[u.gnb].h/2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // 3. Draw Modules (Nodes)
+  // mecOrchestrator
+  drawBox(L.orch.x, L.orch.y, L.orch.w, L.orch.h, 9, "#1e1b4b", "#a855f7", 2);
+  ctx.fillStyle = "#e9d5ff";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("mecOrchestrator", L.orch.x, L.orch.y - 16);
+  ctx.fillStyle = "#c4b5fd";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(`Scores | H1:${orchestratorState.scores[0].toFixed(2)} H2:${orchestratorState.scores[1].toFixed(2)} H3:${orchestratorState.scores[2].toFixed(2)}`, L.orch.x, L.orch.y + 2);
+  ctx.fillStyle = "#fde047";
+  ctx.font = "9.5px sans-serif";
+  ctx.fillText(orchestratorState.lastDecision, L.orch.x, L.orch.y + 18);
+
+  // ualcmp
+  drawBox(L.ualcmp.x, L.ualcmp.y, L.ualcmp.w, L.ualcmp.h, 9, "#1e1b4b", "#8b5cf6", 1.8);
+  ctx.fillStyle = "#e9d5ff";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("ualcmp", L.ualcmp.x, L.ualcmp.y - 5);
+  ctx.fillStyle = "#a78bfa";
+  ctx.font = "10px sans-serif";
+  ctx.fillText("App LCM Proxy", L.ualcmp.x, L.ualcmp.y + 11);
+
+  // Anchor upf (drawn cleanly in center without any overlapping lines)
+  drawBox(L.upf.x, L.upf.y, L.upf.w, L.upf.h, 8, "#0f172a", "#38bdf8", 2.2);
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("upf", L.upf.x, L.upf.y - 4);
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.fillText("Anchor UPF", L.upf.x, L.upf.y + 11);
+
+  // iUpf1 & iUpf2
+  L.iUpf.forEach((pt, idx) => {
+    drawBox(pt.x, pt.y, pt.w, pt.h, 7, "#0f172a", "#0ea5e9", 1.8);
+    ctx.fillStyle = "#e0f2fe";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(`iUpf${idx + 1}`, pt.x, pt.y - 3);
+    ctx.fillStyle = "#7dd3fc";
+    ctx.font = "9.5px sans-serif";
+    ctx.fillText("Local Breakout", pt.x, pt.y + 10);
+  });
+
+  // gnb1 & gnb2
+  L.gnb.forEach((pt, idx) => {
+    drawBox(pt.x, pt.y, pt.w, pt.h, 8, "#1e293b", "#64748b", 1.8);
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(gnbs[idx].name, pt.x, pt.y - 4);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(gnbs[idx].sub, pt.x, pt.y + 11);
+  });
+
+  // 3 MEC Hosts (mecHost1, mecHost2, mecHost3)
+  mecHosts.forEach((h, idx) => {
+    const pt = L.hosts[idx];
+    let totalWork = h.queue + (h.activeTask ? h.activeTask.remC : 0);
+    let loadPct = Math.min(1, totalWork / h.maxQueue);
+    let borderCol = loadPct > 0.85 ? "#ef4444" : h.color;
+
+    drawBox(pt.x, pt.y, pt.w, pt.h, 9, "#111827", borderCol, 2.2);
+    ctx.fillStyle = h.color;
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(h.name, pt.x, pt.y - 26);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "9.5px sans-serif";
+    ctx.fillText(`${h.tier} | ${h.cpuMax/1000}k MIPS`, pt.x, pt.y - 12);
+
+    let barW = pt.w - 24;
+    drawBox(pt.x, pt.y + 6, barW, 14, 4, "#0b1120", "#334155", 1);
+    if (loadPct > 0) {
+      let fillW = Math.max(6, (barW - 2) * loadPct);
+      ctx.fillStyle = loadPct > 0.85 ? "#ef4444" : (loadPct > 0.5 ? "#f59e0b" : "#10b981");
+      ctx.beginPath();
+      ctx.roundRect(pt.x - barW/2 + 1, pt.y, fillW, 12, 3);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 9.5px sans-serif";
+    ctx.fillText(`VIM Load: ${Math.round(loadPct * 100)}%`, pt.x, pt.y + 9);
+
+    ctx.fillStyle = h.activeTask ? "#34d399" : "#64748b";
+    ctx.font = "9.5px sans-serif";
+    let statusTxt = loadPct >= 0.98 ? "CONGESTED (FULL)" : (h.activeTask ? `Running MECApp (T#${h.activeTask.id})` : "MECApp Idle");
+    ctx.fillText(statusTxt, pt.x, pt.y + 28);
+  });
+
+  // UEs (ue[0..2])
+  ues.forEach((u, idx) => {
+    const pt = L.uePos[idx];
+    let strokeCol = u.localExecTimer > 0 ? "#ef4444" : (u.boundHost !== -1 ? mecHosts[u.boundHost].color : "#64748b");
+    drawBox(pt.x, pt.y, 130, 42, 8, "#1e293b", strokeCol, 2);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(`${u.name} (${u.desc})`, pt.x, pt.y - 4);
+
+    ctx.fillStyle = u.localExecTimer > 0 ? "#fca5a5" : "#94a3b8";
+    ctx.font = "9.5px sans-serif";
+    let bindTxt = u.localExecTimer > 0 ? "Local Fallback Exec!" : (u.boundHost !== -1 ? `Bound -> ${mecHosts[u.boundHost].name}` : "Unbound (LCM Init)");
+    ctx.fillText(bindTxt, pt.x, pt.y + 10);
+  });
+
+  // 4. Draw Moving Packets
+  lcmPackets.forEach(p => {
+    let a = p.waypoints[p.seg];
+    let b = p.waypoints[p.seg + 1];
+    if (!a || !b) return;
+    let x = a.x + (b.x - a.x) * p.segProgress;
+    let y = a.y + (b.y - a.y) * p.segProgress;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 7.5, 0, Math.PI * 2);
+    ctx.fillStyle = "#a855f7";
+    ctx.fill();
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#e9d5ff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillText("LCM", x, y - 11);
+  });
+
+  userPackets.forEach(p => {
+    let a = p.waypoints[p.seg];
+    let b = p.waypoints[p.seg + 1];
+    if (!a || !b) return;
+    let x = a.x + (b.x - a.x) * p.segProgress;
+    let y = a.y + (b.y - a.y) * p.segProgress;
+
+    ctx.beginPath();
+    ctx.arc(x, y, 8, 0, Math.PI * 2);
+    ctx.fillStyle = p.isReturn ? "#10b981" : mecHosts[p.hostIdx].color;
+    ctx.fill();
+    ctx.strokeStyle = "#0b1120";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#0b1120";
+    ctx.font = "bold 8.5px sans-serif";
+    ctx.fillText(p.isReturn ? "OK" : `T${p.id}`, x, y + 3);
+  });
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resetSim();
+loop();
+</script>
+</body>
+</html>
