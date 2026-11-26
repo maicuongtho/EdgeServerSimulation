@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Edge Computing Task Offloading Simulation (v7)</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #0b1120; color: #f8fafc; overflow: hidden; }
+  
+  #app {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    gap: 12px;
+    z-index: 10;
+  }
+  .title-group { display: flex; flex-direction: column; }
+  .title { font-size: 16px; font-weight: 700; color: #38bdf8; letter-spacing: 0.4px; }
+  .subtitle { font-size: 11px; color: #94a3b8; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button {
+    padding: 6px 12px;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  button:hover { background: #334155; }
+  button.active { background: #0284c7; border-color: #38bdf8; color: #ffffff; }
+  button.btn-fs { background: #10b981; border-color: #34d399; color: #064e3b; }
+  button.btn-fs:hover { background: #34d399; }
+
+  .speed-control {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #0f172a;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #475569;
+    font-size: 12px;
+    color: #cbd5e1;
+  }
+  .speed-control input[type="range"] { width: 85px; accent-color: #38bdf8; cursor: pointer; }
+  #lbl-speed { font-weight: 700; color: #38bdf8; min-width: 32px; text-align: right; }
+
+  /* Stats Bar */
+  .stats-bar {
+    display: flex;
+    justify-content: space-around;
+    background: #0f172a;
+    padding: 7px 16px;
+    font-size: 12px;
+    border-bottom: 1px solid #1e293b;
+  }
+  .stat-item span { font-weight: 700; color: #38bdf8; font-size: 13px; margin-left: 4px; }
+
+  /* Main Workspace */
+  .workspace {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* Left Canvas Area */
+  .canvas-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: #0b1120;
+  }
+  #canvas-container { flex: 1; position: relative; width: 100%; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* Compact Legend Bar */
+  .legend-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 18px;
+    padding: 8px 16px;
+    background: #111827;
+    border-top: 1px solid #1e293b;
+    font-size: 11px;
+    color: #cbd5e1;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .line-dash { width: 18px; height: 0; border-top: 2px dashed #38bdf8; display: inline-block; }
+  .line-curve { width: 18px; height: 0; border-top: 2px dotted #2dd4bf; display: inline-block; }
+
+  /* Right Sidebar Log */
+  .sidebar {
+    width: 340px;
+    background: #0f172a;
+    border-left: 1px solid #1e293b;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 10px 14px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 0.5px;
+  }
+  .btn-clear-log { padding: 3px 8px; font-size: 11px; background: #0f172a; border-color: #475569; }
+
+  #log-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11.5px;
+  }
+  .log-entry {
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: #1e293b88;
+    border-left: 3px solid #64748b;
+    line-height: 1.4;
+    word-break: break-word;
+  }
+  .log-time { color: #64748b; font-size: 10.5px; margin-right: 4px; }
+  .log-tag { font-weight: 700; margin-right: 4px; }
+  .log-gen { border-left-color: #fbbf24; }
+  .log-gen .log-tag { color: #fbbf24; }
+  .log-sched { border-left-color: #38bdf8; }
+  .log-sched .log-tag { color: #38bdf8; }
+  .log-exec { border-left-color: #a855f7; }
+  .log-exec .log-tag { color: #c084fc; }
+  .log-ret { border-left-color: #2dd4bf; }
+  .log-ret .log-tag { color: #2dd4bf; }
+  .log-tel { border-left-color: #64748b; opacity: 0.85; }
+  .log-tel .log-tag { color: #94a3b8; }
+
+  /* Author Footer */
+  .author-footer {
+    padding: 10px 14px;
+    background: #1e293b;
+    border-top: 1px solid #334155;
+    font-size: 11.5px;
+    color: #94a3b8;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .author-footer strong { color: #f8fafc; font-weight: 600; }
+  .author-footer a { color: #38bdf8; text-decoration: none; }
+  .author-footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Top Control Bar -->
+  <div class="toolbar">
+    <div class="title-group">
+      <div class="title">EDGE COMPUTING TASK OFFLOADING SIMULATION</div>
+      <div class="subtitle">End-to-End Real-Time Modeling: Generation, Scheduling, Edge Execution & Result Return</div>
+    </div>
+
+    <div class="controls">
+      <button id="btn-smart" class="active" onclick="setAlgo('SMART')">Load & Latency Aware</button>
+      <button id="btn-rr" onclick="setAlgo('RR')">Round Robin</button>
+      <button id="btn-rand" onclick="setAlgo('RANDOM')">Random</button>
+      
+      <div class="speed-control" title="Adjust simulation speed">
+        <span>Speed:</span>
+        <input type="range" id="speed-slider" min="0.1" max="2.0" step="0.1" value="1.0" oninput="updateSpeed(this.value)">
+        <span id="lbl-speed">1.0x</span>
+      </div>
+
+      <button id="btn-pause" onclick="togglePause()">Pause</button>
+      <button onclick="resetSim()">Reset</button>
+      <button class="btn-fs" onclick="toggleFullscreen()">Fullscreen</button>
+    </div>
+  </div>
+
+  <!-- Metrics Bar -->
+  <div class="stats-bar">
+    <div class="stat-item">Policy:<span id="lbl-algo">Load & Latency Aware</span></div>
+    <div class="stat-item">Generated Tasks:<span id="lbl-total">0</span></div>
+    <div class="stat-item">Completed:<span id="lbl-done">0</span></div>
+    <div class="stat-item">Avg Round-Trip Latency:<span id="lbl-delay">0.00s</span></div>
+    <div class="stat-item">Load Balance:<span id="lbl-balance">Optimal</span></div>
+  </div>
+
+  <!-- Main Workspace -->
+  <div class="workspace">
+    <!-- Left Canvas & Legend -->
+    <div class="canvas-section">
+      <div id="canvas-container">
+        <canvas id="simCanvas"></canvas>
+      </div>
+      <div class="legend-bar">
+        <div class="legend-item"><span class="dot" style="background:#fbbf24;"></span>New Task (Device -> Scheduler)</div>
+        <div class="legend-item"><span class="dot" style="background:#38bdf8;"></span>Routed to Server 1</div>
+        <div class="legend-item"><span class="dot" style="background:#34d399;"></span>Routed to Server 2</div>
+        <div class="legend-item"><span class="dot" style="background:#f59e0b;"></span>Routed to Server 3</div>
+        <div class="legend-item"><span class="line-curve"></span><span class="dot" style="background:#2dd4bf;"></span>Result Return (Edge -> Device)</div>
+        <div class="legend-item"><span class="line-dash"></span>Load Telemetry Feedback</div>
+      </div>
+    </div>
+
+    <!-- Right Sidebar Event Log -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>SYSTEM EVENT LOG</span>
+        <button class="btn-clear-log" onclick="clearLog()">Clear</button>
+      </div>
+      <div id="log-list"></div>
+      <div class="author-footer">
+        <div>Author: <strong>Mai Cường Thọ</strong></div>
+        <div>Contact: <a href="mailto:thomc@ntu.edu.vn">thomc@ntu.edu.vn</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+const logList = document.getElementById('log-list');
+
+let width, height;
+function resizeCanvas() {
+  width = container.clientWidth;
+  height = container.clientHeight;
+  canvas.width = width;
+  canvas.height = height;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Simulation State
+let algo = 'SMART';
+let paused = false;
+let simSpeed = 1.0;
+let simClock = 0.0;
+let taskCounter = 0;
+let rrIndex = 0;
+let totalLatencySum = 0;
+let completedTasks = 0;
+
+// Tier 1: End-User Devices
+const devices = [
+  { id: 0, name: "Smartphone", sub: "AR Rendering", timer: 35, creating: null, flashTimer: 0 },
+  { id: 1, name: "Smart Camera", sub: "Object Detection", timer: 95, creating: null, flashTimer: 0 },
+  { id: 2, name: "Autonomous Vehicle", sub: "LiDAR Fusion", timer: 155, creating: null, flashTimer: 0 }
+];
+
+// Tier 2: Central Task Scheduler
+const scheduler = {
+  knownLoads: [0, 0, 0],
+  queue: [],
+  activeTask: null,
+  evalProgress: 0,
+  scores: [0, 0, 0],
+  chosenIdx: -1,
+  statusText: "Idle - Monitoring edge nodes"
+};
+
+// Tier 3: Edge Servers
+const servers = [
+  { id: 0, name: "Edge Server 1", spec: "High CPU (100) | Far (0.50s)", cpu: 100, netDelay: 0.50, queue: [], activeTask: null, execProgress: 0, maxCap: 250, color: "#38bdf8" },
+  { id: 1, name: "Edge Server 2", spec: "Med CPU (60) | Near (0.10s)", cpu: 60, netDelay: 0.10, queue: [], activeTask: null, execProgress: 0, maxCap: 180, color: "#34d399" },
+  { id: 2, name: "Edge Server 3", spec: "Low CPU (40) | Ultra-Near (0.05s)", cpu: 40, netDelay: 0.05, queue: [], activeTask: null, execProgress: 0, maxCap: 120, color: "#f59e0b" }
+];
+
+let uplinkPackets = [];   // Device -> Scheduler
+let downlinkPackets = []; // Scheduler -> Edge Server
+let returnPackets = [];   // Edge Server -> Device (Result)
+let telemetryPackets = []; // Edge Server -> Scheduler (Load status)
+
+function formatTime(sec) {
+  let mins = Math.floor(sec / 60).toString().padStart(2, '0');
+  let secs = (sec % 60).toFixed(1).padStart(4, '0');
+  return `${mins}:${secs}`;
+}
+
+function addLog(type, tag, message) {
+  const entry = document.createElement('div');
+  entry.className = `log-entry log-${type}`;
+  entry.innerHTML = `<span class="log-time">[${formatTime(simClock)}]</span><span class="log-tag">[${tag}]</span>${message}`;
+  logList.appendChild(entry);
+  if (logList.children.length > 80) {
+    logList.removeChild(logList.firstChild);
+  }
+  logList.scrollTop = logList.scrollHeight;
+}
+
+function clearLog() {
+  logList.innerHTML = '';
+}
+
+function updateSpeed(val) {
+  simSpeed = parseFloat(val);
+  document.getElementById('lbl-speed').innerText = simSpeed.toFixed(1) + "x";
+}
+
+function setAlgo(newAlgo) {
+  algo = newAlgo;
+  document.getElementById('btn-smart').classList.toggle('active', algo === 'SMART');
+  document.getElementById('btn-rr').classList.toggle('active', algo === 'RR');
+  document.getElementById('btn-rand').classList.toggle('active', algo === 'RANDOM');
+  const names = { 'SMART': 'Load & Latency Aware', 'RR': 'Round Robin', 'RANDOM': 'Random' };
+  document.getElementById('lbl-algo').innerText = names[algo];
+  resetSim();
+  addLog('sched', 'POLICY', `Switched scheduling policy to ${names[algo]}`);
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btn-pause').innerText = paused ? "Resume" : "Pause";
+}
+
+function toggleFullscreen() {
+  const elem = document.getElementById("app");
+  if (!document.fullscreenElement) {
+    elem.requestFullscreen().catch(err => alert("Fullscreen blocked: " + err.message));
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+function resetSim() {
+  simClock = 0;
+  taskCounter = 0;
+  rrIndex = 0;
+  totalLatencySum = 0;
+  completedTasks = 0;
+  uplinkPackets = [];
+  downlinkPackets = [];
+  returnPackets = [];
+  telemetryPackets = [];
+  scheduler.knownLoads = [0, 0, 0];
+  scheduler.queue = [];
+  scheduler.activeTask = null;
+  scheduler.evalProgress = 0;
+  scheduler.chosenIdx = -1;
+  scheduler.statusText = "Idle - Monitoring edge nodes";
+  servers.forEach(s => {
+    s.queue = [];
+    s.activeTask = null;
+    s.execProgress = 0;
+  });
+  devices.forEach((d, i) => {
+    d.creating = null;
+    d.flashTimer = 0;
+    d.timer = 30 + i * 55;
+  });
+  clearLog();
+  updateStats();
+  addLog('sched', 'SYSTEM', 'Simulation environment initialized.');
+}
+
+function getServerTotalLoad(s) {
+  let qLoad = s.queue.reduce((sum, t) => sum + t.C, 0);
+  let activeRem = s.activeTask ? s.activeTask.C * (1 - s.execProgress) : 0;
+  return qLoad + activeRem;
+}
+
+function getLayout() {
+  const col1X = width * 0.14;
+  const col2X = width * 0.48;
+  const col3X = width * 0.83;
+  const rowsY = [height * 0.21, height * 0.50, height * 0.79];
+  return { col1X, col2X, col3X, rowsY };
+}
+
+let telemetryCounter = 0;
+function update() {
+  if (paused) return;
+  simClock += 0.016 * simSpeed;
+  telemetryCounter += simSpeed;
+
+  const { col1X, col2X, col3X, rowsY } = getLayout();
+
+  // 1. Device Task Generation
+  devices.forEach((dev, idx) => {
+    if (dev.flashTimer > 0) dev.flashTimer -= simSpeed;
+    dev.timer -= simSpeed;
+
+    if (dev.timer <= 28 && dev.timer > 0 && !dev.creating) {
+      taskCounter++;
+      let dSize = Math.floor(Math.random() * 12) + 4;
+      let cSize = Math.floor(Math.random() * 45) + 25;
+      dev.creating = {
+        id: taskCounter,
+        deviceId: idx,
+        deviceName: dev.name,
+        D: dSize,
+        C: cSize,
+        createdAt: simClock
+      };
+      addLog('gen', 'CREATE', `${dev.name} generated Task #${taskCounter} (D:${dSize}MB, C:${cSize}MC)`);
+    }
+
+    if (dev.timer <= 0 && dev.creating) {
+      uplinkPackets.push({
+        task: dev.creating,
+        startX: col1X + 80,
+        startY: rowsY[idx],
+        targetX: col2X - 105,
+        targetY: rowsY[1],
+        progress: 0
+      });
+      dev.creating = null;
+      dev.timer = Math.floor(Math.random() * 95) + 90;
+    }
+  });
+
+  // 2. Uplink Packets (Device -> Scheduler)
+  for (let i = uplinkPackets.length - 1; i >= 0; i--) {
+    let p = uplinkPackets[i];
+    p.progress += 0.025 * simSpeed;
+    if (p.progress >= 1) {
+      scheduler.queue.push(p.task);
+      uplinkPackets.splice(i, 1);
+    }
+  }
+
+  // 3. Scheduler Internal Processing
+  if (!scheduler.activeTask && scheduler.queue.length > 0) {
+    scheduler.activeTask = scheduler.queue.shift();
+    scheduler.evalProgress = 0;
+
+    // Evaluate servers based on policy
+    servers.forEach((s, idx) => {
+      let waitTime = scheduler.knownLoads[idx] / s.cpu;
+      let execTime = scheduler.activeTask.C / s.cpu;
+      scheduler.scores[idx] = s.netDelay + waitTime + execTime;
+    });
+
+    if (algo === 'RANDOM') {
+      scheduler.chosenIdx = Math.floor(Math.random() * servers.length);
+      scheduler.statusText = `Random -> Edge Server ${scheduler.chosenIdx + 1}`;
+    } else if (algo === 'RR') {
+      scheduler.chosenIdx = rrIndex % servers.length;
+      rrIndex++;
+      scheduler.statusText = `Round Robin -> Edge Server ${scheduler.chosenIdx + 1}`;
+    } else {
+      let bestIdx = 0;
+      let minVal = Infinity;
+      scheduler.scores.forEach((val, idx) => {
+        if (val < minVal) { minVal = val; bestIdx = idx; }
+      });
+      scheduler.chosenIdx = bestIdx;
+      scheduler.statusText = `Min Delay (${minVal.toFixed(2)}s) -> Server ${bestIdx + 1}`;
+    }
+  }
+
+  if (scheduler.activeTask) {
+    scheduler.evalProgress += 0.045 * simSpeed;
+    if (scheduler.evalProgress >= 1) {
+      let t = scheduler.activeTask;
+      let sIdx = scheduler.chosenIdx;
+      let estDelay = scheduler.scores[sIdx].toFixed(2);
+      addLog('sched', 'ROUTE', `Task #${t.id} -> Edge Server ${sIdx + 1} (Est. Delay: ${estDelay}s)`);
+
+      downlinkPackets.push({
+        task: t,
+        serverIdx: sIdx,
+        startX: col2X + 105,
+        startY: rowsY[1] - 12,
+        targetX: col3X - 105,
+        targetY: rowsY[sIdx] - 12,
+        progress: 0
+      });
+
+      scheduler.activeTask = null;
+      scheduler.evalProgress = 0;
+    }
+  }
+
+  // 4. Downlink Packets (Scheduler -> Edge Server)
+  for (let i = downlinkPackets.length - 1; i >= 0; i--) {
+    let p = downlinkPackets[i];
+    let netFactor = Math.max(0.012, 0.032 - servers[p.serverIdx].netDelay * 0.03);
+    p.progress += netFactor * simSpeed;
+    if (p.progress >= 1) {
+      servers[p.serverIdx].queue.push(p.task);
+      downlinkPackets.splice(i, 1);
+    }
+  }
+
+  // 5. Edge Server Execution & Telemetry Feedback
+  servers.forEach((s, idx) => {
+    if (!s.activeTask && s.queue.length > 0) {
+      s.activeTask = s.queue.shift();
+      s.execProgress = 0;
+      addLog('exec', 'EXEC', `Server ${idx + 1} started Task #${s.activeTask.id} (CPU: ${s.cpu})`);
+    }
+
+    if (s.activeTask) {
+      let rate = (s.cpu / s.activeTask.C) * 0.018 * simSpeed;
+      s.execProgress += rate;
+      if (s.execProgress >= 1) {
+        let finishedTask = s.activeTask;
+        s.activeTask = null;
+        s.execProgress = 0;
+
+        // Spawn Result Return Packet back to originating Device
+        returnPackets.push({
+          task: finishedTask,
+          fromServerIdx: idx,
+          toDeviceIdx: finishedTask.deviceId,
+          startX: col3X - 105,
+          startY: rowsY[idx] + 28,
+          targetX: col1X + 80,
+          targetY: rowsY[finishedTask.deviceId] + 18,
+          progress: 0
+        });
+      }
+    }
+
+    // Periodic Telemetry Feedback to Scheduler
+    if (Math.floor(telemetryCounter) % 50 === idx * 16 && telemetryPackets.length < 6) {
+      let alreadySent = telemetryPackets.some(tp => tp.serverIdx === idx && tp.progress < 0.3);
+      if (!alreadySent) {
+        telemetryPackets.push({
+          serverIdx: idx,
+          reportedLoad: getServerTotalLoad(s),
+          startX: col3X - 105,
+          startY: rowsY[idx] + 12,
+          targetX: col2X + 105,
+          targetY: rowsY[1] + 16,
+          progress: 0
+        });
+      }
+    }
+  });
+
+  // 6. Update Telemetry Packets
+  for (let i = telemetryPackets.length - 1; i >= 0; i--) {
+    let tp = telemetryPackets[i];
+    tp.progress += 0.03 * simSpeed;
+    if (tp.progress >= 1) {
+      scheduler.knownLoads[tp.serverIdx] = tp.reportedLoad;
+      telemetryPackets.splice(i, 1);
+    }
+  }
+
+  // 7. Update Return Result Packets (Edge Server -> Device)
+  for (let i = returnPackets.length - 1; i >= 0; i--) {
+    let rp = returnPackets[i];
+    let netFactor = Math.max(0.015, 0.035 - servers[rp.fromServerIdx].netDelay * 0.03);
+    rp.progress += netFactor * simSpeed;
+    if (rp.progress >= 1) {
+      let rtt = simClock - rp.task.createdAt;
+      totalLatencySum += rtt;
+      completedTasks++;
+      devices[rp.toDeviceIdx].flashTimer = 25;
+      addLog('ret', 'DONE', `Task #${rp.task.id} returned to ${rp.task.deviceName} (RTT: ${rtt.toFixed(2)}s)`);
+      returnPackets.splice(i, 1);
+      updateStats();
+    }
+  }
+}
+
+function updateStats() {
+  document.getElementById('lbl-total').innerText = taskCounter;
+  document.getElementById('lbl-done').innerText = completedTasks;
+  let avg = completedTasks > 0 ? (totalLatencySum / completedTasks).toFixed(2) : "0.00";
+  document.getElementById('lbl-delay').innerText = avg + "s";
+
+  let ratios = servers.map(s => getServerTotalLoad(s) / s.cpu);
+  let spread = Math.max(...ratios) - Math.min(...ratios);
+  let balEl = document.getElementById('lbl-balance');
+  if (spread < 0.5) { balEl.innerText = "Optimal"; balEl.style.color = "#34d399"; }
+  else if (spread < 1.2) { balEl.innerText = "Moderate"; balEl.style.color = "#fbbf24"; }
+  else { balEl.innerText = "Imbalanced"; balEl.style.color = "#f87171"; }
+}
+
+function drawRoundedRect(x, y, w, h, r, fill, stroke, lineWidth = 2) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineWidth; ctx.stroke(); }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, width, height);
+  const { col1X, col2X, col3X, rowsY } = getLayout();
+
+  // Column Headers
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "bold 12px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("1. END-USER DEVICES", col1X, 26);
+  ctx.fillText("2. CENTRAL TASK SCHEDULER", col2X, 26);
+  ctx.fillText("3. EDGE SERVERS", col3X, 26);
+
+  // Background Connection Lines
+  // Device -> Scheduler
+  devices.forEach((_, idx) => {
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(col1X + 80, rowsY[idx]);
+    ctx.lineTo(col2X - 105, rowsY[1]);
+    ctx.stroke();
+  });
+
+  // Scheduler <-> Edge Servers
+  servers.forEach((_, idx) => {
+    // Downlink route
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(col2X + 105, rowsY[1] - 12);
+    ctx.lineTo(col3X - 105, rowsY[idx] - 12);
+    ctx.stroke();
+
+    // Telemetry feedback dashed line
+    ctx.save();
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "#0284c766";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(col3X - 105, rowsY[idx] + 12);
+    ctx.lineTo(col2X + 105, rowsY[1] + 16);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Return Curves (Edge Server -> Device)
+  servers.forEach((_, sIdx) => {
+    devices.forEach((__, dIdx) => {
+      ctx.save();
+      ctx.setLineDash([2, 5]);
+      ctx.strokeStyle = "#2dd4bf18";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(col3X - 105, rowsY[sIdx] + 28);
+      ctx.quadraticCurveTo(col2X, height - 15, col1X + 80, rowsY[dIdx] + 18);
+      ctx.stroke();
+      ctx.restore();
+    });
+  });
+
+  // Draw Tier 1: Devices
+  devices.forEach((dev, idx) => {
+    let x = col1X - 80, y = rowsY[idx] - 40;
+    let borderCol = dev.flashTimer > 0 ? "#2dd4bf" : (dev.creating ? "#fbbf24" : "#334155");
+    drawRoundedRect(x, y, 160, 80, 10, "#111827", borderCol, dev.flashTimer > 0 ? 3 : 2);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText(dev.name, col1X, y + 24);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px sans-serif";
+    ctx.fillText(dev.sub, col1X, y + 42);
+
+    if (dev.creating) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText(`Generating Task #${dev.creating.id} (C:${dev.creating.C})`, col1X, y + 64);
+    } else if (dev.flashTimer > 0) {
+      ctx.fillStyle = "#2dd4bf";
+      ctx.font = "bold 11px sans-serif";
+      ctx.fillText("Result Received!", col1X, y + 64);
+    }
+  });
+
+  // Draw Tier 2: Task Scheduler (Detailed Internal Processing)
+  let sx = col2X - 105, sy = rowsY[1] - 115;
+  drawRoundedRect(sx, sy, 210, 230, 12, "#111827", "#38bdf8", 2);
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 14px sans-serif";
+  ctx.fillText("TASK SCHEDULER", col2X, sy + 24);
+
+  // Incoming Buffer
+  drawRoundedRect(sx + 12, sy + 34, 186, 26, 6, "#1e293b", "#334155", 1);
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "11px sans-serif";
+  ctx.fillText(`Scheduler Buffer: ${scheduler.queue.length} waiting`, col2X, sy + 51);
+
+  // Evaluation Core
+  drawRoundedRect(sx + 12, sy + 66, 186, 48, 6, "#1e293b", scheduler.activeTask ? "#fbbf24" : "#334155", 1.5);
+  if (scheduler.activeTask) {
+    ctx.fillStyle = "#fbbf24";
+    ctx.font = "bold 11px sans-serif";
+    ctx.fillText(`Evaluating Task #${scheduler.activeTask.id} (C:${scheduler.activeTask.C})`, col2X, sy + 83);
+    // Progress bar
+    drawRoundedRect(sx + 22, sy + 92, 166, 10, 4, "#0f172a", null);
+    drawRoundedRect(sx + 22, sy + 92, 166 * scheduler.evalProgress, 10, 4, "#fbbf24", null);
+  } else {
+    ctx.fillStyle = "#64748b";
+    ctx.font = "italic 11px sans-serif";
+    ctx.fillText("Decision Core: Idle", col2X, sy + 94);
+  }
+
+  // Known Telemetry & Cost Table
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "bold 10.5px sans-serif";
+  ctx.fillText("Known Load & Predicted Delay:", col2X, sy + 132);
+
+  servers.forEach((s, idx) => {
+    let pct = Math.min(100, Math.round((scheduler.knownLoads[idx] / s.maxCap) * 100));
+    let scoreStr = scheduler.activeTask ? ` -> Est: ${scheduler.scores[idx].toFixed(2)}s` : "";
+    ctx.fillStyle = (scheduler.activeTask && scheduler.chosenIdx === idx) ? "#fde047" : s.color;
+    ctx.font = (scheduler.activeTask && scheduler.chosenIdx === idx) ? "bold 11px sans-serif" : "11px sans-serif";
+    ctx.fillText(`S${idx + 1}: ${pct}% load${scoreStr}`, col2X, sy + 150 + idx * 17);
+  });
+
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "italic 10.5px sans-serif";
+  ctx.fillText(scheduler.statusText, col2X, sy + 214);
+
+  // Draw Tier 3: Edge Servers (Queue + Active Execution Core)
+  servers.forEach((s, idx) => {
+    let bx = col3X - 105, by = rowsY[idx] - 62;
+    let totalLoad = getServerTotalLoad(s);
+    let loadRatio = Math.min(1, totalLoad / s.maxCap);
+    let borderCol = loadRatio > 0.75 ? "#ef4444" : (loadRatio > 0.45 ? "#f59e0b" : s.color);
+
+    drawRoundedRect(bx, by, 210, 124, 10, "#111827", borderCol, 2);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText(s.name, col3X, by + 20);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10.5px sans-serif";
+    ctx.fillText(s.spec, col3X, by + 36);
+
+    // Wait Queue Box
+    drawRoundedRect(bx + 12, by + 44, 186, 24, 5, "#1e293b", "#334155", 1);
+    let qIds = s.queue.map(t => `#${t.id}`).join(", ");
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "10.5px sans-serif";
+    ctx.fillText(`Wait Queue (${s.queue.length}): ${qIds || "Empty"}`, col3X, by + 60);
+
+    // Active CPU Execution Box
+    drawRoundedRect(bx + 12, by + 74, 186, 38, 5, "#1e293b", s.activeTask ? "#a855f7" : "#334155", 1.5);
+    if (s.activeTask) {
+      let pct = Math.min(100, Math.round(s.execProgress * 100));
+      ctx.fillStyle = "#e9d5ff";
+      ctx.font = "bold 10.5px sans-serif";
+      ctx.fillText(`Executing Task #${s.activeTask.id} (${pct}%)`, col3X, by + 89);
+
+      drawRoundedRect(bx + 20, by + 96, 170, 9, 4, "#0f172a", null);
+      drawRoundedRect(bx + 20, by + 96, 170 * s.execProgress, 9, 4, "#a855f7", null);
+    } else {
+      ctx.fillStyle = "#64748b";
+      ctx.font = "italic 10.5px sans-serif";
+      ctx.fillText("CPU Core: Idle", col3X, by + 97);
+    }
+  });
+
+  // Draw Telemetry Packets (Edge -> Scheduler)
+  telemetryPackets.forEach(tp => {
+    let x = tp.startX + (tp.targetX - tp.startX) * tp.progress;
+    let y = tp.startY + (tp.targetY - tp.startY) * tp.progress;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#38bdf8";
+    ctx.fill();
+  });
+
+  // Draw Uplink Packets (Device -> Scheduler)
+  uplinkPackets.forEach(p => {
+    let x = p.startX + (p.targetX - p.startX) * p.progress;
+    let y = p.startY + (p.targetY - p.startY) * p.progress;
+    drawPacket(x, y, `T${p.task.id}`, "#fbbf24", `C:${p.task.C}`);
+  });
+
+  // Draw Downlink Packets (Scheduler -> Edge Server)
+  downlinkPackets.forEach(p => {
+    let x = p.startX + (p.targetX - p.startX) * p.progress;
+    let y = p.startY + (p.targetY - p.startY) * p.progress;
+    drawPacket(x, y, `T${p.task.id}`, servers[p.serverIdx].color, `C:${p.task.C}`);
+  });
+
+  // Draw Return Result Packets (Edge Server -> Device along quadratic curve)
+  returnPackets.forEach(rp => {
+    let t = rp.progress;
+    let cx = col2X;
+    let cy = height - 15;
+    let x = (1 - t) * (1 - t) * rp.startX + 2 * (1 - t) * t * cx + t * t * rp.targetX;
+    let y = (1 - t) * (1 - t) * rp.startY + 2 * (1 - t) * t * cy + t * t * rp.targetY;
+    drawPacket(x, y, `R${rp.task.id}`, "#2dd4bf", "Result");
+  });
+}
+
+function drawPacket(x, y, label, color, subLabel) {
+  ctx.beginPath();
+  ctx.arc(x, y, 11, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = "#0b1120";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = "#0b1120";
+  ctx.font = "bold 9.5px sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText(label, x, y + 3.5);
+
+  if (subLabel) {
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "9.5px sans-serif";
+    ctx.fillText(subLabel, x, y - 15);
+  }
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+resetSim();
+loop();
+</script>
+</body>
+</html>
