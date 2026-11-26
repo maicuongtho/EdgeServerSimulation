@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5G MEC Host Selection Simulator (ETSI GS MEC 003 / 3GPP 5G Core)</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
+  body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #090d16; color: #f1f5f9; overflow: hidden; }
+  #app { display: flex; flex-direction: column; width: 100vw; height: 100vh; }
+
+  /* Toolbar */
+  .toolbar {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    padding: 10px 18px; background: #111827; border-bottom: 1px solid #1f2937; gap: 10px; z-index: 10;
+  }
+  .brand { display: flex; flex-direction: column; }
+  .brand-title { font-size: 15px; font-weight: 700; color: #38bdf8; letter-spacing: 0.4px; }
+  .brand-sub { font-size: 11px; color: #94a3b8; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+  button {
+    padding: 6px 12px; border: 1px solid #374151; border-radius: 5px;
+    background: #1f2937; color: #e2e8f0; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  button:hover { background: #374151; }
+  button.active { background: #0284c7; border-color: #38bdf8; color: #ffffff; }
+  button.btn-ho { background: #4f46e5; border-color: #818cf8; color: #ffffff; }
+  button.btn-ho:hover { background: #4338ca; }
+  button.btn-fs { background: #059669; border-color: #34d399; color: #ffffff; }
+  button.btn-fs:hover { background: #047857; }
+
+  .speed-box {
+    display: flex; align-items: center; gap: 6px; background: #1f2937;
+    padding: 4px 10px; border-radius: 5px; border: 1px solid #374151; font-size: 12px;
+  }
+  input[type="range"] { width: 85px; accent-color: #38bdf8; cursor: pointer; }
+
+  /* Metrics Strip */
+  .metrics-bar {
+    display: flex; justify-content: space-around; align-items: center;
+    background: #0f172a; padding: 7px 16px; border-bottom: 1px solid #1e293b; font-size: 12px;
+  }
+  .metric { display: flex; align-items: center; gap: 6px; color: #94a3b8; }
+  .metric b { color: #38bdf8; font-size: 13px; }
+
+  /* Workspace */
+  .workspace { display: flex; flex: 1; overflow: hidden; }
+  .canvas-area { flex: 1; display: flex; flex-direction: column; position: relative; background: #090d16; }
+  #canvas-wrap { flex: 1; position: relative; width: 100%; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* Compact Legend Bar */
+  .legend-bar {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 18px;
+    padding: 7px 14px; background: #111827; border-top: 1px solid #1f2937; font-size: 11px; color: #cbd5e1;
+  }
+  .leg-item { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .line-dash { width: 18px; height: 0; border-top: 2px dashed #a855f7; display: inline-block; }
+  .line-telem { width: 18px; height: 0; border-top: 2px dotted #06b6d4; display: inline-block; }
+
+  /* Right Sidebar Log */
+  .sidebar {
+    width: 340px; background: #111827; border-left: 1px solid #1f2937;
+    display: flex; flex-direction: column;
+  }
+  .sidebar-header {
+    padding: 10px 14px; background: #1f2937; border-bottom: 1px solid #374151;
+    font-size: 12px; font-weight: 700; color: #e2e8f0; letter-spacing: 0.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .log-list {
+    flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px;
+    font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;
+  }
+  .log-item {
+    padding: 7px 9px; border-radius: 4px; background: #0f172a;
+    border-left: 3px solid #475569; line-height: 1.4; color: #cbd5e1;
+  }
+  .log-item.cp { border-left-color: #a855f7; }
+  .log-item.up { border-left-color: #38bdf8; }
+  .log-item.exec { border-left-color: #f59e0b; }
+  .log-item.done { border-left-color: #10b981; }
+  .log-item.ho { border-left-color: #818cf8; background: #1e1b4b55; }
+  .tag { font-weight: 700; margin-right: 4px; }
+  .tag-cp { color: #c084fc; }
+  .tag-up { color: #38bdf8; }
+  .tag-exec { color: #fbbf24; }
+  .tag-done { color: #34d399; }
+  .tag-ho { color: #a5b4fc; }
+
+  .author-footer {
+    padding: 10px 14px; background: #0f172a; border-top: 1px solid #1f2937;
+    font-size: 11px; color: #94a3b8; text-align: center; line-height: 1.5;
+  }
+  .author-footer strong { color: #e2e8f0; }
+  .author-footer a { color: #38bdf8; text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="toolbar">
+    <div class="brand">
+      <div class="brand-title">5G MEC HOST SELECTION SIMULATOR (ETSI GS MEC 003 / 3GPP 5GC)</div>
+      <div class="brand-sub">Control/User Plane Separation &amp; 4-Component 5G Delay Model (NR + Backhaul + Queue + CPU)</div>
+    </div>
+
+    <div class="controls">
+      <button id="btn-smart" class="active" onclick="setAlgo('SMART')">5G QoS &amp; Load-Aware</button>
+      <button id="btn-nearest" onclick="setAlgo('NEAREST')">Nearest gNB-MEC</button>
+      <button id="btn-rr" onclick="setAlgo('RR')">Round Robin</button>
+      <button class="btn-ho" onclick="triggerHandover()">Switch UE gNB (Handover)</button>
+      <div class="speed-box">
+        <span>Speed:</span>
+        <input type="range" id="speedRange" min="0.1" max="2.0" step="0.1" value="1.0" oninput="updateSpeed(this.value)">
+        <b id="speedVal" style="color:#38bdf8;">1.0x</b>
+      </div>
+      <button id="btn-pause" onclick="togglePause()">Pause</button>
+      <button onclick="resetSim()">Reset</button>
+      <button class="btn-fs" onclick="toggleFullscreen()">Fullscreen</button>
+    </div>
+  </div>
+
+  <div class="metrics-bar">
+    <div class="metric">Policy: <b id="m-algo">5G QoS &amp; Load-Aware</b></div>
+    <div class="metric">Completed Tasks: <b id="m-done">0</b></div>
+    <div class="metric">Avg E2E Delay: <b id="m-delay">0.000s</b></div>
+    <div class="metric">Avg 5G NR + Backhaul: <b id="m-net">0.000s</b></div>
+    <div class="metric">Cluster Load Balance: <b id="m-bal">Optimal</b></div>
+  </div>
+
+  <div class="workspace">
+    <div class="canvas-area">
+      <div id="canvas-wrap">
+        <canvas id="simCanvas"></canvas>
+      </div>
+      <div class="legend-bar">
+        <div class="leg-item"><span class="line-dash"></span> Control Plane (MEO &rarr; SMF &rarr; UPF UL CL Rule)</div>
+        <div class="leg-item"><span class="dot" style="background:#fbbf24;"></span> Uplink Task (UE &rarr; gNB &rarr; UPF)</div>
+        <div class="leg-item"><span class="dot" style="background:#38bdf8;"></span> Local Breakout Data (UPF &rarr; MEC)</div>
+        <div class="leg-item"><span class="dot" style="background:#34d399;"></span> Downlink Result Return</div>
+        <div class="leg-item"><span class="line-telem"></span> MEC Telemetry (CPU/Queue Report)</div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span>5G SYSTEM EVENT LOG</span>
+        <span style="font-size:10px; color:#38bdf8; font-weight:600;">LIVE TELEMETRY</span>
+      </div>
+      <div class="log-list" id="logList"></div>
+      <div class="author-footer">
+        Author: <strong>Mai Cuong Tho</strong><br>
+        Contact: <a href="mailto:thomc@ntu.edu.vn">thomc@ntu.edu.vn</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvas-wrap');
+const logList = document.getElementById('logList');
+
+let W = 1000, H = 600;
+function resize() {
+  W = wrap.clientWidth;
+  H = wrap.clientHeight;
+  canvas.width = W;
+  canvas.height = H;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// State variables
+let algo = 'SMART';
+let simSpeed = 1.0;
+let paused = false;
+let taskSeq = 0;
+let rrPtr = 0;
+let completedTasks = 0;
+let sumTotalDelay = 0;
+let sumNetDelay = 0;
+let frameTick = 0;
+
+// 5G User Equipment (UEs)
+const ues = [
+  { id: 0, name: "5G Smartphone", app: "Cloud Gaming", gnbId: 0, nrRateMbps: 180, sinr: "22 dB", timer: 45, draftTask: null, glow: 0 },
+  { id: 1, name: "Autonomous V2X", app: "LIDAR Fusion", gnbId: 0, nrRateMbps: 140, sinr: "18 dB", timer: 115, draftTask: null, glow: 0 },
+  { id: 2, name: "5G Smart Camera", app: "4K Video AI", gnbId: 1, nrRateMbps: 110, sinr: "15 dB", timer: 185, draftTask: null, glow: 0 }
+];
+
+// 5G gNodeBs
+const gnbs = [
+  { id: 0, name: "gNB-01 (Cell A)", freq: "3.5 GHz n78", localMecId: 0 },
+  { id: 1, name: "gNB-02 (Cell B)", freq: "3.5 GHz n78", localMecId: 1 }
+];
+
+// 5G Core Control & User Plane
+const core5g = {
+  meoStatus: "Monitoring ETSI MEC Hosts",
+  smfRule: "UL CL Policy: Idle",
+  upfActive: 0
+};
+
+// ETSI MEC Hosts
+const mecHosts = [
+  { id: 0, name: "MEC Host 1 (gNB-01 Site)", cpu: 100, queue: [], activeTask: null, maxCap: 240, color: "#38bdf8" },
+  { id: 1, name: "MEC Host 2 (gNB-02 Site)", cpu: 75,  queue: [], activeTask: null, maxCap: 200, color: "#c084fc" },
+  { id: 2, name: "MEC Host 3 (Regional Edge)", cpu: 130, queue: [], activeTask: null, maxCap: 300, color: "#fb923c" }
+];
+
+// Backhaul / N9 interface delay matrix (seconds) from gNB[i] to MEC[j]
+const backhaulMatrix = [
+  [0.005, 0.045, 0.025], // From gNB-01 -> MEC 1 (Local 5ms), MEC 2 (Remote 45ms), MEC 3 (Regional 25ms)
+  [0.045, 0.005, 0.025]  // From gNB-02 -> MEC 1 (Remote 45ms), MEC 2 (Local 5ms), MEC 3 (Regional 25ms)
+];
+
+// MEO Telemetry Knowledge
+let knownMecState = [
+  { queueLoad: 0, activeRem: 0 },
+  { queueLoad: 0, activeRem: 0 },
+  { queueLoad: 0, activeRem: 0 }
+];
+
+let cpSignals = [];    // Control plane signaling packets
+let upPackets = [];    // User plane task data packets
+let dlPackets = [];    // Downlink result return packets
+let telemPackets = []; // Telemetry feedback packets
+
+function addLog(type, tag, msg) {
+  const div = document.createElement('div');
+  div.className = `log-item ${type}`;
+  const now = new Date();
+  const ts = now.toTimeString().split(' ')[0];
+  div.innerHTML = `<span style="color:#64748b">[${ts}]</span> <span class="tag tag-${type}">[${tag}]</span>${msg}`;
+  logList.prepend(div);
+  if (logList.children.length > 45) {
+    logList.removeChild(logList.lastChild);
+  }
+}
+
+function setAlgo(newAlgo) {
+  algo = newAlgo;
+  document.getElementById('btn-smart').classList.toggle('active', algo === 'SMART');
+  document.getElementById('btn-nearest').classList.toggle('active', algo === 'NEAREST');
+  document.getElementById('btn-rr').classList.toggle('active', algo === 'RR');
+  const labels = {
+    'SMART': '5G QoS & Load-Aware',
+    'NEAREST': 'Nearest gNB-MEC',
+    'RR': 'Round Robin'
+  };
+  document.getElementById('m-algo').innerText = labels[algo];
+  addLog('cp', 'POLICY', `Switched MEC selection policy to <b>${labels[algo]}</b>`);
+  resetSim();
+}
+
+function updateSpeed(val) {
+  simSpeed = parseFloat(val);
+  document.getElementById('speedVal').innerText = simSpeed.toFixed(1) + 'x';
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btn-pause').innerText = paused ? "Resume" : "Pause";
+}
+
+function toggleFullscreen() {
+  const el = document.getElementById('app');
+  if (!document.fullscreenElement) {
+    el.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+function triggerHandover() {
+  // Handover Autonomous V2X (UE 1) between gNB-01 and gNB-02
+  const v2x = ues[1];
+  const oldGnb = v2x.gnbId;
+  v2x.gnbId = oldGnb === 0 ? 1 : 0;
+  v2x.nrRateMbps = v2x.gnbId === 1 ? 190 : 140;
+  v2x.sinr = v2x.gnbId === 1 ? "24 dB" : "18 dB";
+  addLog('ho', 'HANDOVER', `<b>${v2x.name}</b> handed over from <b>gNB-0${oldGnb+1}</b> &rarr; <b>gNB-0${v2x.gnbId+1}</b> (NR Rate: ${v2x.nrRateMbps} Mbps)`);
+}
+
+function resetSim() {
+  taskSeq = 0;
+  rrPtr = 0;
+  completedTasks = 0;
+  sumTotalDelay = 0;
+  sumNetDelay = 0;
+  cpSignals = [];
+  upPackets = [];
+  dlPackets = [];
+  telemPackets = [];
+  mecHosts.forEach((m, i) => {
+    m.queue = [];
+    m.activeTask = null;
+    knownMecState[i] = { queueLoad: 0, activeRem: 0 };
+  });
+  updateMetrics();
+}
+
+function getLayout() {
+  const xUE = W * 0.11;
+  const xGNB = W * 0.31;
+  const xCore = W * 0.54;
+  const xMEC = W * 0.81;
+
+  const yUE = [H * 0.22, H * 0.50, H * 0.78];
+  const yGNB = [H * 0.33, H * 0.67];
+  const yMEO = H * 0.22;
+  const ySMF = H * 0.44;
+  const yUPF = H * 0.70;
+  const yMEC = [H * 0.21, H * 0.50, H * 0.79];
+
+  return { xUE, xGNB, xCore, xMEC, yUE, yGNB, yMEO, ySMF, yUPF, yMEC };
+}
+
+function evaluateMecSelection(task, gnbId, nrRateMbps) {
+  // Data size D (MB) -> Megabits = D * 8
+  const nrDelay = (task.D * 8) / nrRateMbps;
+
+  let chosenIdx = 0;
+  let breakdown = [];
+
+  mecHosts.forEach((m, idx) => {
+    const bhDelay = backhaulMatrix[gnbId][idx];
+    const pendingWork = knownMecState[idx].queueLoad + knownMecState[idx].activeRem;
+    const waitDelay = pendingWork / m.cpu;
+    const execDelay = task.C / m.cpu;
+    const total = nrDelay + bhDelay + waitDelay + execDelay;
+    breakdown.push({ idx, total, nrDelay, bhDelay, waitDelay, execDelay });
+  });
+
+  if (algo === 'NEAREST') {
+    chosenIdx = gnbs[gnbId].localMecId;
+  } else if (algo === 'RR') {
+    chosenIdx = rrPtr % mecHosts.length;
+    rrPtr++;
+  } else {
+    let best = breakdown[0];
+    for (let b of breakdown) {
+      if (b.total < best.total) best = b;
+    }
+    chosenIdx = best.idx;
+  }
+
+  return { chosenIdx, selectedStats: breakdown[chosenIdx] };
+}
+
+function update() {
+  if (paused) return;
+  frameTick += simSpeed;
+  const L = getLayout();
+
+  // 1. MEC Hosts Execution & Telemetry Reporting
+  mecHosts.forEach((m, idx) => {
+    if (!m.activeTask && m.queue.length > 0) {
+      m.activeTask = m.queue.shift();
+      m.activeTask.remainingC = m.activeTask.C;
+      addLog('exec', 'EXEC', `<b>MEC Host ${idx+1}</b> started CPU execution for <b>Task #${m.activeTask.id}</b> (C=${m.activeTask.C})`);
+    }
+    if (m.activeTask) {
+      const workDone = (m.cpu * 0.015) * simSpeed;
+      m.activeTask.remainingC -= workDone;
+      if (m.activeTask.remainingC <= 0) {
+        const finished = m.activeTask;
+        m.activeTask = null;
+        // Launch Downlink Result Packet: MEC -> UPF -> gNB -> UE
+        dlPackets.push({
+          task: finished,
+          mecIdx: idx,
+          gnbIdx: finished.gnbId,
+          ueIdx: finished.ueId,
+          hop: 1, // 1: MEC->UPF, 2: UPF->gNB, 3: gNB->UE
+          prog: 0
+        });
+        addLog('done', 'DONE', `<b>Task #${finished.id}</b> completed at MEC Host ${idx+1}. Returning result via UPF &rarr; gNB-0${finished.gnbId+1}`);
+      }
+    }
+
+    // Periodic Telemetry to MEO
+    if (Math.floor(frameTick) % 50 === idx * 16 && telemPackets.filter(t => t.mecIdx === idx).length === 0) {
+      const qLoad = m.queue.reduce((acc, t) => acc + t.C, 0);
+      const aRem = m.activeTask ? Math.max(0, m.activeTask.remainingC) : 0;
+      telemPackets.push({
+        mecIdx: idx,
+        prog: 0,
+        qLoad,
+        aRem
+      });
+    }
+  });
+
+  // Move Telemetry Packets (MEC -> MEO)
+  for (let i = telemPackets.length - 1; i >= 0; i--) {
+    let t = telemPackets[i];
+    t.prog += 0.025 * simSpeed;
+    if (t.prog >= 1) {
+      knownMecState[t.mecIdx] = { queueLoad: t.qLoad, activeRem: t.aRem };
+      telemPackets.splice(i, 1);
+    }
+  }
+
+  // 2. UE Task Generation & Control Plane Request
+  ues.forEach((ue, idx) => {
+    if (ue.glow > 0) ue.glow = Math.max(0, ue.glow - 0.03 * simSpeed);
+    ue.timer -= simSpeed;
+
+    if (ue.timer <= 30 && ue.timer > 0 && !ue.draftTask) {
+      taskSeq++;
+      const D = Math.floor(Math.random() * 12) + 4;  // MB
+      const C = Math.floor(Math.random() * 45) + 25; // Megacycles
+      ue.draftTask = { id: taskSeq, D, C, ueId: idx, gnbId: ue.gnbId, nrRate: ue.nrRateMbps };
+    }
+
+    if (ue.timer <= 0 && ue.draftTask) {
+      const task = ue.draftTask;
+      ue.draftTask = null;
+      ue.timer = Math.floor(Math.random() * 110) + 120;
+
+      // Step A: Control Plane Discovery Signal (UE -> gNB -> MEO)
+      const decision = evaluateMecSelection(task, ue.gnbId, ue.nrRateMbps);
+      task.targetMec = decision.chosenIdx;
+      task.stats = decision.selectedStats;
+
+      cpSignals.push({
+        task,
+        phase: 1, // 1: UE->MEO (Service Req), 2: MEO->SMF (Select MEC), 3: SMF->UPF (Program UL CL Rule)
+        prog: 0
+      });
+
+      addLog('cp', 'CTRL-PLANE', `<b>${ue.name}</b> generated <b>Task #${task.id}</b> (D=${task.D}MB, C=${task.C}). Requesting MEO placement...`);
+    }
+  });
+
+  // 3. Move Control Plane Signals
+  for (let i = cpSignals.length - 1; i >= 0; i--) {
+    let cp = cpSignals[i];
+    cp.prog += 0.038 * simSpeed;
+    if (cp.prog >= 1) {
+      cp.prog = 0;
+      if (cp.phase === 1) {
+        cp.phase = 2;
+        core5g.meoStatus = `Selected MEC Host ${cp.task.targetMec + 1} for Task #${cp.task.id}`;
+      } else if (cp.phase === 2) {
+        cp.phase = 3;
+        core5g.smfRule = `SMF -> UPF: UL CL Route Task #${cp.task.id} to MEC-${cp.task.targetMec + 1}`;
+      } else {
+        // Control plane setup complete -> Start User Plane Uplink Data Transmission!
+        const st = cp.task.stats;
+        addLog('up', 'USER-PLANE', `UPF UL CL active for <b>Task #${cp.task.id}</b> &rarr; <b>MEC Host ${cp.task.targetMec + 1}</b> (NR:${st.nrDelay.toFixed(2)}s + BH:${st.bhDelay.toFixed(3)}s + Q:${st.waitDelay.toFixed(2)}s + CPU:${st.execDelay.toFixed(2)}s)`);
+        upPackets.push({
+          task: cp.task,
+          hop: 1, // 1: UE->gNB, 2: gNB->UPF, 3: UPF->MEC Host
+          prog: 0
+        });
+        cpSignals.splice(i, 1);
+      }
+    }
+  }
+
+  // 4. Move User Plane Uplink Packets
+  for (let i = upPackets.length - 1; i >= 0; i--) {
+    let p = upPackets[i];
+    // Speed scales inversely with NR/Backhaul delay
+    let hopSpeed = 0.032;
+    if (p.hop === 1) hopSpeed = Math.max(0.018, 0.042 - p.task.stats.nrDelay * 0.02);
+    if (p.hop === 3) hopSpeed = Math.max(0.018, 0.042 - p.task.stats.bhDelay * 0.35);
+
+    p.prog += hopSpeed * simSpeed;
+    if (p.prog >= 1) {
+      p.prog = 0;
+      if (p.hop === 1) {
+        p.hop = 2;
+      } else if (p.hop === 2) {
+        p.hop = 3;
+        core5g.upfActive++;
+      } else {
+        // Arrived at MEC Host
+        core5g.upfActive = Math.max(0, core5g.upfActive - 1);
+        const mec = mecHosts[p.task.targetMec];
+        mec.queue.push(p.task);
+        upPackets.splice(i, 1);
+      }
+    }
+  }
+
+  // 5. Move Downlink Result Packets
+  for (let i = dlPackets.length - 1; i >= 0; i--) {
+    let d = dlPackets[i];
+    d.prog += 0.036 * simSpeed;
+    if (d.prog >= 1) {
+      d.prog = 0;
+      if (d.hop < 3) {
+        d.hop++;
+      } else {
+        // Delivered back to UE
+        ues[d.ueIdx].glow = 1.0;
+        completedTasks++;
+        sumTotalDelay += d.task.stats.total;
+        sumNetDelay += (d.task.stats.nrDelay + d.task.stats.bhDelay);
+        updateMetrics();
+        dlPackets.splice(i, 1);
+      }
+    }
+  }
+}
+
+function updateMetrics() {
+  document.getElementById('m-done').innerText = completedTasks;
+  const avgTot = completedTasks > 0 ? (sumTotalDelay / completedTasks).toFixed(3) : "0.000";
+  const avgNet = completedTasks > 0 ? (sumNetDelay / completedTasks).toFixed(3) : "0.000";
+  document.getElementById('m-delay').innerText = avgTot + "s";
+  document.getElementById('m-net').innerText = avgNet + "s";
+
+  const utils = mecHosts.map(m => {
+    const qLoad = m.queue.reduce((a, b) => a + b.C, 0) + (m.activeTask ? m.activeTask.remainingC : 0);
+    return qLoad / m.maxCap;
+  });
+  const spread = Math.max(...utils) - Math.min(...utils);
+  const balEl = document.getElementById('m-bal');
+  if (spread < 0.25) { balEl.innerText = "Optimal"; balEl.style.color = "#34d399"; }
+  else if (spread < 0.55) { balEl.innerText = "Moderate"; balEl.style.color = "#fbbf24"; }
+  else { balEl.innerText = "Imbalanced"; balEl.style.color = "#f87171"; }
+}
+
+function drawBox(x, y, w, h, r, fill, stroke, lineW = 1.8) {
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lineW; ctx.stroke(); }
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const L = getLayout();
+
+  // Column Zone Backgrounds & Headers
+  const zones = [
+    { x: L.xUE - 85, w: 170, title: "5G USER EQUIPMENT (UE)" },
+    { x: L.xGNB - 75, w: 150, title: "5G RAN (gNodeB)" },
+    { x: L.xCore - 105, w: 210, title: "5G CORE & ETSI MEO" },
+    { x: L.xMEC - 110, w: 220, title: "ETSI MEC HOSTS" }
+  ];
+
+  zones.forEach(z => {
+    drawBox(z.x, 12, z.w, H - 24, 8, "#0f172a66", "#1e293b", 1);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "bold 11px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(z.title, z.x + z.w / 2, 30);
+  });
+
+  // Static Connection Lines
+  // 1. UE -> attached gNB (Wireless 5G NR)
+  ues.forEach((ue, idx) => {
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = "#38bdf866";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(L.xUE + 75, L.yUE[idx]);
+    ctx.lineTo(L.xGNB - 65, L.yGNB[ue.gnbId]);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // 2. gNB <-> UPF (N3 User Plane Interface)
+  gnbs.forEach((g, idx) => {
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(L.xGNB + 65, L.yGNB[idx]);
+    ctx.lineTo(L.xCore - 95, L.yUPF);
+    ctx.stroke();
+  });
+
+  // 3. Control Plane Links (MEO <-> SMF <-> UPF)
+  ctx.setLineDash([5, 4]);
+  ctx.strokeStyle = "#a855f788";
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(L.xCore, L.yMEO + 38);
+  ctx.lineTo(L.xCore, L.ySMF - 32);
+  ctx.moveTo(L.xCore, L.ySMF + 32);
+  ctx.lineTo(L.xCore, L.yUPF - 38);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 4. UPF <-> MEC Hosts (N6 Local Breakout) & MEC -> MEO Telemetry
+  mecHosts.forEach((m, idx) => {
+    // N6 User Plane
+    ctx.strokeStyle = "#334155";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(L.xCore + 95, L.yUPF);
+    ctx.lineTo(L.xMEC - 100, L.yMEC[idx]);
+    ctx.stroke();
+
+    // Telemetry dotted line (MEC -> MEO)
+    ctx.setLineDash([2, 4]);
+    ctx.strokeStyle = "#06b6d455";
+    ctx.beginPath();
+    ctx.moveTo(L.xMEC - 100, L.yMEC[idx] - 18);
+    ctx.lineTo(L.xCore + 95, L.yMEO);
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+
+  // Draw UEs
+  ues.forEach((ue, idx) => {
+    const x = L.xUE - 75, y = L.yUE[idx] - 38;
+    const strokeCol = ue.glow > 0.1 ? "#34d399" : (ue.draftTask ? "#fbbf24" : "#334155");
+    drawBox(x, y, 150, 76, 8, "#111827", strokeCol, ue.glow > 0.1 ? 2.5 : 1.6);
+
+    ctx.fillStyle = "#f8fafc";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(ue.name, L.xUE, y + 20);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px sans-serif";
+    ctx.fillText(`${ue.app} | ${ue.nrRateMbps} Mbps`, L.xUE, y + 37);
+
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 10px sans-serif";
+    ctx.fillText(`Attached: gNB-0${ue.gnbId + 1} (${ue.sinr})`, L.xUE, y + 53);
+
+    if (ue.draftTask) {
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(`Creating Task #${ue.draftTask.id} (D:${ue.draftTask.D}MB)`, L.xUE, y + 68);
+    } else if (ue.glow > 0.1) {
+      ctx.fillStyle = "#34d399";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(`Result Received!`, L.xUE, y + 68);
+    }
+  });
+
+  // Draw gNodeBs
+  gnbs.forEach((g, idx) => {
+    const x = L.xGNB - 65, y = L.yGNB[idx] - 36;
+    drawBox(x, y, 130, 72, 8, "#111827", "#38bdf8", 1.8);
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 13px sans-serif";
+    ctx.fillText(g.name, L.xGNB, y + 24);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px sans-serif";
+    ctx.fillText(g.freq, L.xGNB, y + 42);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(`Local Site: MEC-${g.localMecId + 1}`, L.xGNB, y + 58);
+  });
+
+  // Draw 5G Core & ETSI MEO Nodes
+  // MEO
+  drawBox(L.xCore - 95, L.yMEO - 38, 190, 76, 8, "#1e1b4b", "#a855f7", 2);
+  ctx.fillStyle = "#c084fc";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("MEC ORCHESTRATOR (MEO)", L.xCore, L.yMEO - 16);
+  ctx.fillStyle = "#e2e8f0";
+  ctx.font = "10px sans-serif";
+  ctx.fillText("Control Plane Placement Engine", L.xCore, L.yMEO + 2);
+  ctx.fillStyle = "#fde047";
+  ctx.font = "italic 10px sans-serif";
+  ctx.fillText(core5g.meoStatus, L.xCore, L.yMEO + 20);
+
+  // SMF
+  drawBox(L.xCore - 95, L.ySMF - 32, 190, 64, 8, "#172554", "#818cf8", 1.8);
+  ctx.fillStyle = "#a5b4fc";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("5G CORE SMF (Control Plane)", L.xCore, L.ySMF - 10);
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "10px sans-serif";
+  ctx.fillText(core5g.smfRule, L.xCore, L.ySMF + 10);
+
+  // UPF
+  drawBox(L.xCore - 95, L.yUPF - 38, 190, 76, 8, "#0f172a", "#0284c7", 2);
+  ctx.fillStyle = "#38bdf8";
+  ctx.font = "bold 12px sans-serif";
+  ctx.fillText("5G CORE UPF (User Plane)", L.xCore, L.yUPF - 16);
+  ctx.fillStyle = "#94a3b8";
+  ctx.font = "10px sans-serif";
+  ctx.fillText("N3/N6 Local Breakout (UL CL)", L.xCore, L.yUPF + 2);
+  ctx.fillStyle = "#34d399";
+  ctx.font = "bold 10px sans-serif";
+  ctx.fillText(`Active Data Flows: ${core5g.upfActive}`, L.xCore, L.yUPF + 20);
+
+  // Draw ETSI MEC Hosts (with Queue + Active CPU Execution)
+  mecHosts.forEach((m, idx) => {
+    const x = L.xMEC - 100, y = L.yMEC[idx] - 54;
+    const qLoad = m.queue.reduce((a, b) => a + b.C, 0);
+    const aRem = m.activeTask ? Math.max(0, m.activeTask.remainingC) : 0;
+    const totalLoad = Math.min(m.maxCap, qLoad + aRem);
+    const pct = Math.min(100, Math.round((totalLoad / m.maxCap) * 100));
+
+    drawBox(x, y, 200, 108, 8, "#111827", m.color, 2);
+    ctx.fillStyle = m.color;
+    ctx.font = "bold 12px sans-serif";
+    ctx.fillText(m.name, L.xMEC, y + 18);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "10px sans-serif";
+    ctx.fillText(`CPU: ${m.cpu} MC/s | Queue: ${m.queue.length} tasks | Load: ${pct}%`, L.xMEC, y + 34);
+
+    // Queue Progress Bar
+    drawBox(x + 12, y + 42, 176, 12, 3, "#090d16", "#334155", 1);
+    if (pct > 0) {
+      const barCol = pct > 75 ? "#ef4444" : (pct > 45 ? "#f59e0b" : "#10b981");
+      drawBox(x + 13, y + 43, Math.max(4, 174 * (pct / 100)), 10, 2, barCol, null);
+    }
+
+    // Active MEC Application Execution Sub-box
+    drawBox(x + 12, y + 60, 176, 38, 5, "#0f172a", "#1e293b", 1);
+    if (m.activeTask) {
+      const execPct = Math.min(100, Math.max(0, Math.round(((m.activeTask.C - m.activeTask.remainingC) / m.activeTask.C) * 100)));
+      ctx.fillStyle = "#fbbf24";
+      ctx.font = "bold 10px sans-serif";
+      ctx.fillText(`MEC App Running: Task #${m.activeTask.id} (${execPct}%)`, L.xMEC, y + 75);
+
+      drawBox(x + 20, y + 82, 160, 8, 2, "#090d16", "#334155", 1);
+      drawBox(x + 21, y + 83, Math.max(3, 158 * (execPct / 100)), 6, 2, "#38bdf8", null);
+    } else {
+      ctx.fillStyle = "#64748b";
+      ctx.font = "italic 10px sans-serif";
+      ctx.fillText("MEC App Instance: Idle", L.xMEC, y + 83);
+    }
+  });
+
+  // Draw Telemetry Particles (MEC -> MEO)
+  telemPackets.forEach(t => {
+    const sx = L.xMEC - 100, sy = L.yMEC[t.mecIdx] - 18;
+    const ex = L.xCore + 95, ey = L.yMEO;
+    const px = sx + (ex - sx) * t.prog;
+    const py = sy + (ey - sy) * t.prog;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "#06b6d4";
+    ctx.fill();
+  });
+
+  // Draw Control Plane Signals
+  cpSignals.forEach(cp => {
+    let sx, sy, ex, ey;
+    if (cp.phase === 1) {
+      sx = L.xUE + 75; sy = L.yUE[cp.task.ueId] - 12;
+      ex = L.xCore - 95; ey = L.yMEO;
+    } else if (cp.phase === 2) {
+      sx = L.xCore; sy = L.yMEO + 38;
+      ex = L.xCore; ey = L.ySMF - 32;
+    } else {
+      sx = L.xCore; sy = L.ySMF + 32;
+      ex = L.xCore; ey = L.yUPF - 38;
+    }
+    const px = sx + (ex - sx) * cp.prog;
+    const py = sy + (ey - sy) * cp.prog;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    ctx.fillStyle = "#a855f7";
+    ctx.fill();
+    ctx.fillStyle = "#e9d5ff";
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillText(`CP#${cp.task.id}`, px, py - 9);
+  });
+
+  // Draw User Plane Uplink Packets
+  upPackets.forEach(p => {
+    let sx, sy, ex, ey;
+    if (p.hop === 1) {
+      sx = L.xUE + 75; sy = L.yUE[p.task.ueId];
+      ex = L.xGNB - 65; ey = L.yGNB[p.task.gnbId];
+    } else if (p.hop === 2) {
+      sx = L.xGNB + 65; sy = L.yGNB[p.task.gnbId];
+      ex = L.xCore - 95; ey = L.yUPF;
+    } else {
+      sx = L.xCore + 95; sy = L.yUPF;
+      ex = L.xMEC - 100; ey = L.yMEC[p.task.targetMec];
+    }
+    const px = sx + (ex - sx) * p.prog;
+    const py = sy + (ey - sy) * p.prog;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 9, 0, Math.PI * 2);
+    ctx.fillStyle = p.hop < 3 ? "#fbbf24" : mecHosts[p.task.targetMec].color;
+    ctx.fill();
+    ctx.strokeStyle = "#090d16";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = "#090d16";
+    ctx.font = "bold 9px sans-serif";
+    ctx.fillText(`T${p.task.id}`, px, py + 3);
+  });
+
+  // Draw Downlink Result Packets
+  dlPackets.forEach(d => {
+    let sx, sy, ex, ey;
+    if (d.hop === 1) {
+      sx = L.xMEC - 100; sy = L.yMEC[d.mecIdx] + 15;
+      ex = L.xCore + 95; ey = L.yUPF + 15;
+    } else if (d.hop === 2) {
+      sx = L.xCore - 95; sy = L.yUPF + 15;
+      ex = L.xGNB + 65; ey = L.yGNB[d.gnbIdx] + 15;
+    } else {
+      sx = L.xGNB - 65; sy = L.yGNB[d.gnbIdx] + 15;
+      ex = L.xUE + 75; ey = L.yUE[d.ueIdx] + 15;
+    }
+    const px = sx + (ex - sx) * d.prog;
+    const py = sy + (ey - sy) * d.prog;
+
+    ctx.beginPath();
+    ctx.arc(px, py, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "#34d399";
+    ctx.fill();
+    ctx.fillStyle = "#064e3b";
+    ctx.font = "bold 8px sans-serif";
+    ctx.fillText(`R${d.task.id}`, px, py + 3);
+  });
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+addLog('cp', 'SYSTEM', '5G MEC Simulator initialized (ETSI GS MEC 003 / 3GPP 5GC architecture).');
+loop();
+</script>
+</body>
+</html>
