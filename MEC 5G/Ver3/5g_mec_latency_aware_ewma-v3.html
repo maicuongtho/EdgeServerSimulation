@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simu5G MEC: LatencyAwareSelectionBased (EWMA) - Orthogonal Topology</title>
+<style>
+  * { box-sizing: border-box; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+  body, html { width: 100%; height: 100%; background: #090d16; color: #f1f5f9; overflow: hidden; }
+  #app-wrapper {
+    display: flex; flex-direction: column; width: 100vw; height: 100vh; background: #090d16;
+  }
+  .toolbar {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+    padding: 8px 16px; background: #111827; border-bottom: 1px solid #1f2937; gap: 8px; z-index: 10;
+  }
+  .title-group { display: flex; flex-direction: column; }
+  .title { font-size: 14.5px; font-weight: 700; color: #38bdf8; letter-spacing: 0.3px; }
+  .subtitle { font-size: 11px; color: #94a3b8; }
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button {
+    padding: 5px 10px; border: 1px solid #374151; border-radius: 5px;
+    background: #1f2937; color: #e2e8f0; font-size: 11.5px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  button:hover { background: #374151; }
+  button.active { background: #0284c7; border-color: #38bdf8; color: #ffffff; }
+  button.btn-burst { background: #b91c1c; border-color: #ef4444; color: #ffffff; }
+  button.btn-burst:hover { background: #dc2626; }
+  button.btn-ho { background: #6d28d9; border-color: #8b5cf6; color: #ffffff; }
+  button.btn-ho:hover { background: #7c3aed; }
+  button.btn-fs { background: #059669; border-color: #10b981; color: #ffffff; }
+  button.btn-fs:hover { background: #10b981; }
+
+  .slider-box {
+    display: flex; align-items: center; gap: 5px; background: #0f172a;
+    padding: 4px 8px; border-radius: 5px; border: 1px solid #334155; font-size: 11px; color: #cbd5e1;
+  }
+  .slider-box input[type=range] { width: 65px; accent-color: #38bdf8; cursor: pointer; }
+  .slider-val { font-weight: 700; color: #38bdf8; min-width: 28px; text-align: right; font-family: monospace; }
+
+  .stats-bar {
+    display: flex; justify-content: space-around; align-items: center;
+    background: #0f172a; padding: 6px 12px; font-size: 11.5px; border-bottom: 1px solid #1e293b;
+  }
+  .stat-item { color: #94a3b8; }
+  .stat-item span { font-weight: 700; color: #38bdf8; font-size: 12.5px; margin-left: 4px; }
+
+  .main-workspace {
+    display: flex; flex: 1; overflow: hidden; width: 100%;
+  }
+  .left-pane {
+    flex: 1; display: flex; flex-direction: column; position: relative; min-width: 0;
+  }
+  #canvas-container { flex: 1; position: relative; width: 100%; height: 100%; }
+  canvas { display: block; width: 100%; height: 100%; }
+
+  .legend-bar {
+    display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px;
+    padding: 6px 12px; background: #111827; border-top: 1px solid #1f2937; font-size: 11px; color: #cbd5e1;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+  .sidebar {
+    width: 320px; min-width: 290px; background: #111827; border-left: 1px solid #1f2937;
+    display: flex; flex-direction: column; justify-content: space-between;
+  }
+  .telemetry-panel {
+    padding: 10px 12px; border-bottom: 1px solid #1f2937; background: #0f172a;
+  }
+  .panel-header {
+    display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;
+  }
+  .panel-title { font-size: 11px; font-weight: 700; color: #e2e8f0; letter-spacing: 0.4px; }
+  .panel-sub { font-size: 10px; color: #64748b; margin-bottom: 6px; }
+  .live-metrics { font-size: 11px; font-weight: 700; font-family: monospace; }
+  #chartCanvas {
+    width: 100%; height: 115px; background: #090d16; border: 1px solid #1e293b; border-radius: 6px; display: block;
+  }
+  .log-header {
+    padding: 8px 12px; font-size: 11px; font-weight: 700; color: #94a3b8;
+    border-bottom: 1px solid #1f2937; display: flex; justify-content: space-between; align-items: center;
+  }
+  .log-list {
+    flex: 1; overflow-y: auto; padding: 8px 10px; display: flex; flex-direction: column; gap: 5px;
+    font-family: 'Consolas', 'Courier New', monospace; font-size: 11px;
+  }
+  .log-entry {
+    padding: 5px 7px; border-radius: 4px; background: #1e293b88; border-left: 3px solid #38bdf8;
+    line-height: 1.35; color: #e2e8f0; word-break: break-word;
+  }
+  .log-entry.lcm { border-left-color: #a855f7; }
+  .log-entry.data { border-left-color: #10b981; }
+  .log-entry.warn { border-left-color: #f59e0b; }
+  .log-entry.fb { border-left-color: #ef4444; }
+  .log-time { color: #64748b; font-size: 10px; margin-right: 4px; }
+
+  .author-footer {
+    padding: 8px 12px; background: #090d16; border-top: 1px solid #1f2937;
+    font-size: 11px; color: #94a3b8; text-align: center;
+  }
+  .author-footer strong { color: #38bdf8; }
+</style>
+</head>
+<body>
+
+<div id="app-wrapper">
+  <div class="toolbar">
+    <div class="title-group">
+      <div class="title">5G MEC: LatencyAwareSelectionBased (EWMA Scoring Model)</div>
+      <div class="subtitle">S(h) = L̃(h) · (1 + α · C̃(h)) | Orthogonal 4-Tier Simu5G Architecture</div>
+    </div>
+    <div class="controls">
+      <button id="btn-ewma" class="active" onclick="setPolicy('EWMA')">LatencyAware (EWMA)</button>
+      <button id="btn-avail" onclick="setPolicy('AVAIL')">AvailableResourcesBased</button>
+      <button id="btn-host" onclick="setPolicy('HOST')">MecHostBased (Fixed)</button>
+
+      <div class="slider-box" title="Load Penalty Weight (alpha)">
+        <span>α:</span>
+        <input type="range" id="alphaSlider" min="0" max="2.0" step="0.1" value="0.5" oninput="updateAlpha(this.value)">
+        <span class="slider-val" id="alphaVal">0.5</span>
+      </div>
+
+      <div class="slider-box" title="Animation Speed">
+        <span>Speed:</span>
+        <input type="range" id="speedSlider" min="0.1" max="2.0" step="0.1" value="1.0" oninput="updateSpeed(this.value)">
+        <span class="slider-val" id="speedVal">1.0x</span>
+      </div>
+
+      <button class="btn-burst" onclick="triggerBurst()">+ Burst Traffic</button>
+      <button class="btn-ho" onclick="triggerHandover()">X2 Handover</button>
+      <button id="btn-pause" onclick="togglePause()">Pause</button>
+      <button onclick="resetSim()">Reset</button>
+      <button class="btn-fs" onclick="toggleFullscreen()">Fullscreen</button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-item">Policy: <span id="st-policy">LatencyAwareSelectionBased</span></div>
+    <div class="stat-item">EWMA Smoothing (γL, γC): <span>0.35, 0.35</span></div>
+    <div class="stat-item">Hysteresis (ε): <span>1.0 ms</span></div>
+    <div class="stat-item">Completed Tasks: <span id="st-done">0</span></div>
+    <div class="stat-item">Mean E2E Latency: <span id="st-lat">0.0 ms</span></div>
+    <div class="stat-item">UE Local Fallback: <span id="st-fb" style="color:#f87171;">0</span></div>
+  </div>
+
+  <div class="main-workspace">
+    <div class="left-pane">
+      <div id="canvas-container">
+        <canvas id="simCanvas"></canvas>
+      </div>
+      <div class="legend-bar">
+        <div class="legend-item"><span class="dot" style="background:#a855f7;"></span>LCM Control Signaling (ualcmp ↔ mecOrchestrator)</div>
+        <div class="legend-item"><span class="dot" style="background:#10b981;"></span>Uplink Offload Task (User Plane)</div>
+        <div class="legend-item"><span class="dot" style="background:#38bdf8;"></span>Downlink Result Return</div>
+        <div class="legend-item"><span class="dot" style="background:#f59e0b;"></span>MAC DL Delay / VIM Telemetry</div>
+        <div class="legend-item"><span class="dot" style="background:#ef4444;"></span>UE Local Fallback (U > 90%)</div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="telemetry-panel">
+        <div class="panel-header">
+          <span class="panel-title">AVG SYSTEM LATENCY & CLUSTER CPU</span>
+          <span class="live-metrics">
+            <span style="color:#38bdf8;" id="chart-lat-lbl">Lat: 0ms</span> |
+            <span style="color:#f59e0b;" id="chart-cpu-lbl">CPU: 0%</span>
+          </span>
+        </div>
+        <div class="panel-sub">Real-time E2E Task Delay (ms) vs. 3-Host Mean CPU (%)</div>
+        <canvas id="chartCanvas"></canvas>
+      </div>
+
+      <div class="log-header">
+        <span>ORCHESTRATION & EWMA EVENT LOG</span>
+        <button style="padding:2px 6px; font-size:10px;" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-list" id="logList"></div>
+
+      <div class="author-footer">
+        Author: <strong>Mai Cường Thọ</strong> (<a href="mailto:thomc@ntu.edu.vn" style="color:#7dd3fc; text-decoration:none;">thomc@ntu.edu.vn</a>)
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('simCanvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+
+const chartCanvas = document.getElementById('chartCanvas');
+const cctx = chartCanvas.getContext('2d');
+
+let W = 1000, H = 640;
+function resize() {
+  W = container.clientWidth || 1000;
+  H = container.clientHeight || 640;
+  canvas.width = W;
+  canvas.height = H;
+  chartCanvas.width = chartCanvas.clientWidth || 296;
+  chartCanvas.height = 115;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Simulation Parameters (Ozcan et al., 2026)
+let policy = 'EWMA';
+let alpha = 0.5;
+let simSpeed = 1.0;
+let paused = false;
+
+const gammaL = 0.35;
+const gammaC = 0.35;
+const epsilonMs = 1.0;
+const cpuSafetyLimit = 0.90;
+
+// 3 MEC Hosts in Hierarchical Topology
+const hosts = [
+  { id: 0, name: "mecHost1", role: "Local Edge (gNB1)", cpuCap: 10000, linkDelayMs: 2.0, queue: 0, maxQueue: 300, activeTask: null, lTilde: 4.0, cTilde: 0.0, score: 4.0, color: "#38bdf8" },
+  { id: 1, name: "mecHost2", role: "Local Edge (gNB2)", cpuCap: 10000, linkDelayMs: 2.0, queue: 0, maxQueue: 300, activeTask: null, lTilde: 12.0, cTilde: 0.0, score: 12.0, color: "#34d399" },
+  { id: 2, name: "mecHost3", role: "Regional Edge (UPF)", cpuCap: 28000, linkDelayMs: 14.0, queue: 0, maxQueue: 700, activeTask: null, lTilde: 16.0, cTilde: 0.0, score: 16.0, color: "#fbbf24" }
+];
+
+// 3 UEs
+const ues = [
+  { id: 0, name: "ue[0]", app: "AR/VR", gnb: 0, boundHost: -1, timer: 45, fallbackActive: 0, radioRateMbps: 180 },
+  { id: 1, name: "ue[1]", app: "V2X", gnb: 0, boundHost: -1, timer: 110, fallbackActive: 0, radioRateMbps: 150 },
+  { id: 2, name: "ue[2]", app: "IIoT", gnb: 1, boundHost: -1, timer: 165, fallbackActive: 0, radioRateMbps: 160 }
+];
+
+let packets = [];
+let taskSeq = 0;
+let doneCount = 0;
+let fallbackCount = 0;
+let latSum = 0;
+let latHistory = [];
+let cpuHistory = [];
+let frameTick = 0;
+
+function addLog(tag, msg, cls = '') {
+  const list = document.getElementById('logList');
+  const now = new Date();
+  const ts = now.toTimeString().split(' ')[0];
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + cls;
+  div.innerHTML = `<span class="log-time">[${ts}]</span><strong>[${tag}]</strong> ${msg}`;
+  list.insertBefore(div, list.firstChild);
+  if (list.children.length > 55) list.removeChild(list.lastChild);
+}
+
+function clearLog() { document.getElementById('logList').innerHTML = ''; }
+
+function updateAlpha(v) {
+  alpha = parseFloat(v);
+  document.getElementById('alphaVal').innerText = alpha.toFixed(1);
+  addLog('PARAM', `Updated load penalty weight α = ${alpha.toFixed(1)}`, 'warn');
+}
+
+function updateSpeed(v) {
+  simSpeed = parseFloat(v);
+  document.getElementById('speedVal').innerText = simSpeed.toFixed(1) + 'x';
+}
+
+function setPolicy(p) {
+  policy = p;
+  document.getElementById('btn-ewma').classList.toggle('active', p === 'EWMA');
+  document.getElementById('btn-avail').classList.toggle('active', p === 'AVAIL');
+  document.getElementById('btn-host').classList.toggle('active', p === 'HOST');
+  const mapName = {
+    'EWMA': 'LatencyAwareSelectionBased',
+    'AVAIL': 'AvailableResourcesBased',
+    'HOST': 'MecHostBased (Fixed Local)'
+  };
+  document.getElementById('st-policy').innerText = mapName[p];
+  ues.forEach(u => u.boundHost = -1);
+  addLog('POLICY', `Switched selectionPolicy to ${mapName[p]}`, 'lcm');
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('btn-pause').innerText = paused ? 'Resume' : 'Pause';
+}
+
+function toggleFullscreen() {
+  const el = document.getElementById('app-wrapper');
+  if (!document.fullscreenElement) {
+    el.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen();
+  }
+}
+
+function resetSim() {
+  packets = [];
+  taskSeq = 0;
+  doneCount = 0;
+  fallbackCount = 0;
+  latSum = 0;
+  latHistory = [];
+  cpuHistory = [];
+  hosts.forEach((h, i) => {
+    h.queue = 0; h.activeTask = null;
+    h.lTilde = (i === 0) ? 4.0 : (i === 1 ? 10.0 : 16.0);
+    h.cTilde = 0.0; h.score = h.lTilde;
+  });
+  ues.forEach((u, i) => {
+    u.gnb = (i < 2) ? 0 : 1;
+    u.boundHost = -1;
+    u.fallbackActive = 0;
+  });
+  updateTopStats();
+  addLog('SYSTEM', 'Simulation state reset.', 'warn');
+}
+
+// Compute 4-Tier Symmetrical Grid Anchors
+function getNodes() {
+  const padX = Math.max(85, W * 0.11);
+  const midX = W * 0.46;
+  const leftX = Math.max(95, W * 0.15);
+  const rightX = W - Math.max(95, W * 0.15);
+
+  const y1 = Math.max(58, H * 0.11);   // Control Plane
+  const y2 = Math.max(175, H * 0.34);  // Core UPF & Regional MEC
+  const y3 = Math.max(310, H * 0.59);  // I-UPF & Local MEC
+  const y4 = Math.max(440, H * 0.80);  // gNBs
+  const y5 = Math.max(525, H * 0.93);  // UEs
+
+  return {
+    meo:    { x: midX - 135, y: y1, w: 230, h: 76 },
+    ualcmp: { x: midX + 125, y: y1, w: 130, h: 52 },
+    upf:    { x: midX + 125, y: y2, w: 130, h: 56 },
+    mec3:   { x: rightX,     y: y2, w: 165, h: 74 },
+    mec1:   { x: leftX,      y: y3, w: 165, h: 74 },
+    iupf1:  { x: leftX + 185, y: y3, w: 105, h: 48 },
+    iupf2:  { x: rightX - 185, y: y3, w: 105, h: 48 },
+    mec2:   { x: rightX,     y: y3, w: 165, h: 74 },
+    gnb1:   { x: leftX + 185, y: y4, w: 115, h: 48 },
+    gnb2:   { x: rightX - 185, y: y4, w: 115, h: 48 },
+    ues: [
+      { x: leftX + 85,  y: y5, w: 86, h: 38 },
+      { x: midX,        y: y5, w: 86, h: 38 },
+      { x: rightX - 85, y: y5, w: 86, h: 38 }
+    ],
+    corridorY: (y2 + y3) / 2
+  };
+}
+
+// Compute Topological Prior + EWMA Score S(h) = L_tilde * (1 + alpha * C_tilde)
+function evaluateMecHosts(ue) {
+  let bestIdx = -1;
+  let bestScore = Infinity;
+
+  hosts.forEach((h, idx) => {
+    const rawUtil = Math.min(1.0, (h.queue + (h.activeTask ? h.activeTask.c : 0)) / h.maxQueue);
+    h.cTilde = (1 - gammaC) * h.cTilde + gammaC * rawUtil;
+
+    // Topological Prior based on UE's serving gNB
+    let topoPrior = 15.0;
+    if ((ue.gnb === 0 && idx === 0) || (ue.gnb === 1 && idx === 1)) {
+      topoPrior = 3.0; // Same-gNB local site
+    } else if ((ue.gnb === 0 && idx === 1) || (ue.gnb === 1 && idx === 0)) {
+      topoPrior = 11.0; // Inter-gNB via Anchor UPF
+    } else {
+      topoPrior = 15.5; // Regional Edge via Anchor UPF
+    }
+
+    // Blend prior if host hasn't received recent samples from this gNB
+    if (h.queue === 0 && !h.activeTask) {
+      h.lTilde = (1 - gammaL) * h.lTilde + gammaL * topoPrior;
+    }
+
+    if (policy === 'EWMA') {
+      h.score = h.lTilde * (1.0 + alpha * h.cTilde);
+    } else if (policy === 'AVAIL') {
+      h.score = h.cTilde * 100.0; // Pure CPU headroom
+    } else {
+      h.score = (idx === ue.gnb) ? 1.0 : 999.0; // Fixed local host
+    }
+
+    // Safety threshold U(h) <= 90%
+    if (rawUtil <= cpuSafetyLimit && h.score < bestScore) {
+      bestScore = h.score;
+      bestIdx = idx;
+    }
+  });
+
+  // Hysteresis check if UE already has a bound host
+  if (ue.boundHost !== -1 && bestIdx !== -1 && ue.boundHost !== bestIdx) {
+    const curHost = hosts[ue.boundHost];
+    const curUtil = (curHost.queue + (curHost.activeTask ? curHost.activeTask.c : 0)) / curHost.maxQueue;
+    if (curUtil <= cpuSafetyLimit && policy === 'EWMA') {
+      if (bestScore > curHost.score - epsilonMs) {
+        bestIdx = ue.boundHost; // Keep current host within hysteresis margin
+      }
+    }
+  }
+  return bestIdx;
+}
+
+function buildWaypoints(ueIdx, hostIdx, isLcm, isReturn) {
+  const n = getNodes();
+  const uePos = n.ues[ueIdx];
+  const gnbPos = (ues[ueIdx].gnb === 0) ? n.gnb1 : n.gnb2;
+  const iupfPos = (ues[ueIdx].gnb === 0) ? n.iupf1 : n.iupf2;
+
+  if (isLcm) {
+    // Control plane: UE -> gNB -> iUPF -> UPF -> UALCMP -> MEO
+    const pts = [
+      { x: uePos.x, y: uePos.y - uePos.h/2 },
+      { x: gnbPos.x, y: gnbPos.y + gnbPos.h/2 },
+      { x: gnbPos.x, y: gnbPos.y - gnbPos.h/2 },
+      { x: iupfPos.x, y: iupfPos.y + iupfPos.h/2 },
+      { x: iupfPos.x, y: n.corridorY },
+      { x: n.upf.x, y: n.corridorY },
+      { x: n.upf.x, y: n.upf.y - n.upf.h/2 },
+      { x: n.ualcmp.x, y: n.ualcmp.y + n.ualcmp.h/2 },
+      { x: n.ualcmp.x - n.ualcmp.w/2, y: n.ualcmp.y },
+      { x: n.meo.x + n.meo.w/2, y: n.meo.y }
+    ];
+    return isReturn ? pts.reverse() : pts;
+  }
+
+  // User Plane Data Path
+  let pts = [
+    { x: uePos.x, y: uePos.y - uePos.h/2 },
+    { x: gnbPos.x, y: gnbPos.y + gnbPos.h/2 },
+    { x: gnbPos.x, y: gnbPos.y - gnbPos.h/2 },
+    { x: iupfPos.x, y: iupfPos.y + iupfPos.h/2 }
+  ];
+
+  if (ues[ueIdx].gnb === 0 && hostIdx === 0) {
+    // Local breakout at iUpf1 -> mecHost1
+    pts.push({ x: iupfPos.x - iupfPos.w/2, y: iupfPos.y });
+    pts.push({ x: n.mec1.x + n.mec1.w/2, y: n.mec1.y });
+  } else if (ues[ueIdx].gnb === 1 && hostIdx === 1) {
+    // Local breakout at iUpf2 -> mecHost2
+    pts.push({ x: iupfPos.x + iupfPos.w/2, y: iupfPos.y });
+    pts.push({ x: n.mec2.x - n.mec2.w/2, y: n.mec2.y });
+  } else if (hostIdx === 2) {
+    // iUpf -> Anchor UPF -> mecHost3
+    pts.push({ x: iupfPos.x, y: n.corridorY });
+    pts.push({ x: n.upf.x, y: n.corridorY });
+    pts.push({ x: n.upf.x + n.upf.w/2, y: n.upf.y });
+    pts.push({ x: n.mec3.x - n.mec3.w/2, y: n.mec3.y });
+  } else {
+    // Inter-gNB via Anchor UPF -> other iUpf -> other mecHost
+    const targetIupf = (hostIdx === 0) ? n.iupf1 : n.iupf2;
+    const targetMec  = (hostIdx === 0) ? n.mec1  : n.mec2;
+    pts.push({ x: iupfPos.x, y: n.corridorY });
+    pts.push({ x: targetIupf.x, y: n.corridorY });
+    pts.push({ x: targetIupf.x, y: targetIupf.y - targetIupf.h/2 });
+    if (hostIdx === 0) {
+      pts.push({ x: targetIupf.x - targetIupf.w/2, y: targetIupf.y });
+      pts.push({ x: targetMec.x + targetMec.w/2, y: targetMec.y });
+    } else {
+      pts.push({ x: targetIupf.x + targetIupf.w/2, y: targetIupf.y });
+      pts.push({ x: targetMec.x - targetMec.w/2, y: targetMec.y });
+    }
+  }
+  return isReturn ? pts.reverse() : pts;
+}
+
+function spawnTask(ue, forceReeval = false) {
+  taskSeq++;
+  const task = {
+    id: taskSeq,
+    ueId: ue.id,
+    dataMb: Math.floor(Math.random() * 8) + 2,
+    c: Math.floor(Math.random() * 45) + 25,
+    startTime: performance.now(),
+    targetHost: -1
+  };
+
+  // Trigger LCM Control Plane if unbound or periodic re-evaluation
+  if (ue.boundHost === -1 || forceReeval || taskSeq % 5 === 0) {
+    packets.push({
+      type: 'LCM_REQ',
+      color: '#a855f7',
+      task: task,
+      waypoints: buildWaypoints(ue.id, 0, true, false),
+      seg: 0,
+      segProg: 0
+    });
+    addLog('LCM', `${ue.name} initiated App Instantiation / Re-eval via ualcmp`, 'lcm');
+  } else {
+    // Direct User Plane Offloading to bound MEC Host
+    const hIdx = ue.boundHost;
+    const h = hosts[hIdx];
+    const util = (h.queue + (h.activeTask ? h.activeTask.c : 0)) / h.maxQueue;
+    if (util > cpuSafetyLimit) {
+      // Trigger emergency re-orchestration
+      packets.push({
+        type: 'LCM_REQ',
+        color: '#a855f7',
+        task: task,
+        waypoints: buildWaypoints(ue.id, 0, true, false),
+        seg: 0,
+        segProg: 0
+      });
+      addLog('WARN', `${h.name} > 90% load! ${ue.name} requesting re-orchestration`, 'warn');
+    } else {
+      task.targetHost = hIdx;
+      packets.push({
+        type: 'DATA_UL',
+        color: '#10b981',
+        task: task,
+        waypoints: buildWaypoints(ue.id, hIdx, false, false),
+        seg: 0,
+        segProg: 0
+      });
+    }
+  }
+}
+
+function triggerBurst() {
+  addLog('BURST', 'Injecting multitenant burst traffic (9 concurrent tasks)!', 'warn');
+  for (let b = 0; b < 3; b++) {
+    ues.forEach((u, idx) => {
+      setTimeout(() => spawnTask(u, b === 0), b * 180 + idx * 60);
+    });
+  }
+}
+
+function triggerHandover() {
+  const u = ues[1]; // V2X UE
+  u.gnb = (u.gnb === 0) ? 1 : 0;
+  const gnbName = u.gnb === 0 ? 'gnb1' : 'gnb2';
+  addLog('HANDOVER', `${u.name} (V2X) executed X2 Handover -> ${gnbName}`, 'warn');
+  spawnTask(u, true);
+}
+
+function update() {
+  if (paused) return;
+  frameTick++;
+
+  // 1. Periodic UE task generation
+  ues.forEach(u => {
+    if (u.fallbackActive > 0) u.fallbackActive--;
+    u.timer -= simSpeed;
+    if (u.timer <= 0) {
+      spawnTask(u, false);
+      u.timer = 110 + Math.random() * 80;
+    }
+  });
+
+  // 2. Host CPU Execution
+  hosts.forEach((h, idx) => {
+    if (!h.activeTask && h.queue > 0) {
+      const slice = Math.min(h.queue, 45);
+      h.queue -= slice;
+      h.activeTask = { id: 'Q', c: slice, progress: 0, ueId: -1, isQueuedBatch: true };
+    }
+    if (h.activeTask) {
+      const rate = (h.cpuCap / 10000) * 1.4 * simSpeed;
+      h.activeTask.progress += rate;
+      if (h.activeTask.progress >= 100) {
+        const doneTask = h.activeTask;
+        h.activeTask = null;
+
+        if (!doneTask.isQueuedBatch && doneTask.ueId >= 0) {
+          // Send Downlink Result & MAC Delay Telemetry
+          packets.push({
+            type: 'DATA_DL',
+            color: '#38bdf8',
+            task: doneTask,
+            waypoints: buildWaypoints(doneTask.ueId, idx, false, true),
+            seg: 0,
+            segProg: 0
+          });
+
+          // EWMA Latency Sample Update
+          const radioMs = (doneTask.dataMb * 8) / ues[doneTask.ueId].radioRateMbps * 1000;
+          const backhaulMs = (ues[doneTask.ueId].gnb === idx) ? h.linkDelayMs : (h.linkDelayMs + 8.5);
+          const queueMs = (h.queue / h.cpuCap) * 1000;
+          const sampleMs = Math.max(1.0, Math.min(100.0, radioMs + backhaulMs + queueMs));
+          h.lTilde = (1 - gammaL) * h.lTilde + gammaL * sampleMs;
+        }
+      }
+    }
+  });
+
+  // 3. Move Packets along Orthogonal Waypoints
+  for (let i = packets.length - 1; i >= 0; i--) {
+    const p = packets[i];
+    const p1 = p.waypoints[p.seg];
+    const p2 = p.waypoints[p.seg + 1];
+    if (!p1 || !p2) { packets.splice(i, 1); continue; }
+
+    const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+    const step = (4.2 * simSpeed) / dist;
+    p.segProg += step;
+
+    if (p.segProg >= 1.0) {
+      p.seg++;
+      p.segProg = 0;
+      if (p.seg >= p.waypoints.length - 1) {
+        handlePacketArrival(p);
+        packets.splice(i, 1);
+      }
+    }
+  }
+
+  // 4. Sample Telemetry Chart every 25 frames
+  if (frameTick % 25 === 0) {
+    const avgLat = doneCount > 0 ? (latSum / doneCount) : 12.0;
+    const meanCpu = hosts.reduce((acc, h) => acc + ((h.queue + (h.activeTask ? h.activeTask.c : 0)) / h.maxQueue) * 100, 0) / hosts.length;
+    latHistory.push(avgLat);
+    cpuHistory.push(meanCpu);
+    if (latHistory.length > 45) { latHistory.shift(); cpuHistory.shift(); }
+    document.getElementById('chart-lat-lbl').innerText = `Lat: ${avgLat.toFixed(1)}ms`;
+    document.getElementById('chart-cpu-lbl').innerText = `CPU: ${meanCpu.toFixed(0)}%`;
+  }
+}
+
+function handlePacketArrival(p) {
+  const ue = ues[p.task.ueId];
+  if (p.type === 'LCM_REQ') {
+    // Reached mecOrchestrator -> Evaluate EWMA Score
+    const chosen = evaluateMecHosts(ue);
+    if (chosen === -1) {
+      // All hosts > 90% CPU -> UE Local Fallback
+      fallbackCount++;
+      doneCount++;
+      latSum += 95.0;
+      ue.fallbackActive = 70;
+      addLog('FALLBACK', `All hosts >90% CPU! ${ue.name} executed Task #${p.task.id} locally (95ms)`, 'fb');
+      updateTopStats();
+    } else {
+      ue.boundHost = chosen;
+      p.task.targetHost = chosen;
+      const h = hosts[chosen];
+      addLog('SCORE', `MEO selected ${h.name} for ${ue.name} [L̃=${h.lTilde.toFixed(1)}ms, C̃=${(h.cTilde*100).toFixed(0)}%, S=${h.score.toFixed(2)}]`, 'lcm');
+
+      // Send LCM Ack back to UE & dispatch User Plane Data
+      packets.push({
+        type: 'DATA_UL',
+        color: '#10b981',
+        task: p.task,
+        waypoints: buildWaypoints(ue.id, chosen, false, false),
+        seg: 0,
+        segProg: 0
+      });
+    }
+  } else if (p.type === 'DATA_UL') {
+    const h = hosts[p.task.targetHost];
+    if (!h.activeTask) {
+      p.task.progress = 0;
+      h.activeTask = p.task;
+    } else if (h.queue + p.task.c <= h.maxQueue) {
+      h.queue += p.task.c;
+      // Still track completion latency
+      doneCount++;
+      const e2eMs = h.lTilde * (1 + 0.4 * h.cTilde) + (p.task.c / h.cpuCap) * 1000;
+      latSum += e2eMs;
+      updateTopStats();
+    } else {
+      fallbackCount++;
+      doneCount++;
+      latSum += 95.0;
+      ue.fallbackActive = 60;
+      addLog('FALLBACK', `${h.name} queue full! Task #${p.task.id} fell back to ${ue.name}`, 'fb');
+      updateTopStats();
+    }
+  } else if (p.type === 'DATA_DL') {
+    const h = hosts[p.task.targetHost];
+    doneCount++;
+    const e2eMs = h.lTilde + (p.task.c / h.cpuCap) * 1000;
+    latSum += e2eMs;
+    addLog('DONE', `Task #${p.task.id} completed on ${h.name} -> ${ue.name} (E2E: ${e2eMs.toFixed(1)}ms)`, 'data');
+    updateTopStats();
+  }
+}
+
+function updateTopStats() {
+  document.getElementById('st-done').innerText = doneCount;
+  const avg = doneCount > 0 ? (latSum / doneCount).toFixed(1) : '0.0';
+  document.getElementById('st-lat').innerText = avg + ' ms';
+  document.getElementById('st-fb').innerText = fallbackCount;
+}
+
+// Explicit Orthogonal Polyline Drawer with Port Dots
+function drawOrthogonalPath(points, color = '#64748b', width = 2, dashed = false, label = '', labelPos = null) {
+  if (!points || points.length < 2) return;
+  ctx.save();
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  if (dashed) ctx.setLineDash([5, 4]);
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Draw Port Anchor Dots at Start & End
+  [points[0], points[points.length - 1]].forEach(pt => {
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  if (label && labelPos) {
+    ctx.font = '10px Consolas, monospace';
+    const tw = ctx.measureText(label).width + 8;
+    ctx.fillStyle = '#090d16dd';
+    ctx.fillRect(labelPos.x - tw/2, labelPos.y - 8, tw, 15);
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, labelPos.x, labelPos.y + 3);
+  }
+  ctx.restore();
+}
+
+function drawBox(node, title, subtitle, borderColor = '#38bdf8', bgColor = '#111827') {
+  const x = node.x - node.w / 2;
+  const y = node.y - node.h / 2;
+  ctx.save();
+  ctx.fillStyle = bgColor;
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.roundRect(x, y, node.w, node.h, 7);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 12px Segoe UI, sans-serif';
+  ctx.fillText(title, node.x, y + 18);
+
+  if (subtitle) {
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '10.5px Consolas, monospace';
+    ctx.fillText(subtitle, node.x, y + 34);
+  }
+  ctx.restore();
+}
+
+function drawMecHost(node, host) {
+  const x = node.x - node.w / 2;
+  const y = node.y - node.h / 2;
+  const util = Math.min(1.0, (host.queue + (host.activeTask ? host.activeTask.c : 0)) / host.maxQueue);
+  const barColor = util > 0.90 ? '#ef4444' : (util > 0.65 ? '#f59e0b' : host.color);
+
+  ctx.save();
+  ctx.fillStyle = '#111827';
+  ctx.strokeStyle = barColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x, y, node.w, node.h, 7);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = 'bold 12px Segoe UI, sans-serif';
+  ctx.fillText(`${host.name} (${host.cpuCap/1000}k MIPS)`, node.x, y + 17);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px Consolas, monospace';
+  ctx.fillText(`${host.role} | Link: ${host.linkDelayMs}ms`, node.x, y + 31);
+
+  // CPU / Queue Bar
+  const bx = x + 12, by = y + 38, bw = node.w - 24, bh = 12;
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(bx, by, bw, bh);
+  ctx.fillStyle = barColor;
+  ctx.fillRect(bx, by, bw * util, bh);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 9.5px Consolas, monospace';
+  ctx.fillText(`VIM CPU: ${(util*100).toFixed(0)}% | L̃=${host.lTilde.toFixed(1)}ms`, node.x, by + 9.5);
+
+  // Active Execution status
+  ctx.fillStyle = host.activeTask ? '#34d399' : '#64748b';
+  ctx.font = '10px Consolas, monospace';
+  const execTxt = host.activeTask ? `Exec Task #${host.activeTask.id} (${Math.round(host.activeTask.progress)}%)` : 'Idle (Ready)';
+  ctx.fillText(execTxt, node.x, y + 65);
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  const n = getNodes();
+
+  // Subtle Tier Background Bands
+  const bands = [
+    { y: n.meo.y - 46, h: 92, label: 'TIER 1: ETSI MEC CONTROL & ORCHESTRATION' },
+    { y: n.upf.y - 44, h: 88, label: 'TIER 2: 5G CORE ANCHOR UPF & REGIONAL MEC' },
+    { y: n.iupf1.y - 44, h: 88, label: 'TIER 3: INTERMEDIATE UPF (LOCAL BREAKOUT) & LOCAL MEC' },
+    { y: n.gnb1.y - 34, h: 120, label: 'TIER 4: 5G NR RAN (gNodeB) & USER EQUIPMENT (UE)' }
+  ];
+  bands.forEach(b => {
+    ctx.fillStyle = '#0f172a66';
+    ctx.fillRect(10, b.y, W - 20, b.h);
+    ctx.fillStyle = '#334155';
+    ctx.font = 'bold 9.5px Segoe UI, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(b.label, 18, b.y + 12);
+  });
+
+  // 1. Draw All Explicit Orthogonal Network Links
+  // Control Plane: mecOrchestrator <-> ualcmp
+  drawOrthogonalPath([
+    { x: n.meo.x + n.meo.w/2, y: n.meo.y },
+    { x: n.ualcmp.x - n.ualcmp.w/2, y: n.ualcmp.y }
+  ], '#a855f7', 2, true, 'LCM API', { x: (n.meo.x + n.meo.w/2 + n.ualcmp.x - n.ualcmp.w/2)/2, y: n.meo.y - 10 });
+
+  // Control Plane: ualcmp <-> upf.filterGate
+  drawOrthogonalPath([
+    { x: n.ualcmp.x, y: n.ualcmp.y + n.ualcmp.h/2 },
+    { x: n.upf.x, y: n.upf.y - n.upf.h/2 }
+  ], '#a855f7', 2, true, 'filterGate', { x: n.upf.x + 36, y: (n.ualcmp.y + n.upf.y)/2 });
+
+  // Core -> Regional Edge: upf <-> mecHost3
+  drawOrthogonalPath([
+    { x: n.upf.x + n.upf.w/2, y: n.upf.y },
+    { x: n.mec3.x - n.mec3.w/2, y: n.mec3.y }
+  ], '#64748b', 2.2, false, 'Eth10G (14ms)', { x: (n.upf.x + n.upf.w/2 + n.mec3.x - n.mec3.w/2)/2, y: n.upf.y - 10 });
+
+  // Core -> iUpf1 (Orthogonal Manhattan path)
+  drawOrthogonalPath([
+    { x: n.upf.x - 20, y: n.upf.y + n.upf.h/2 },
+    { x: n.upf.x - 20, y: n.corridorY },
+    { x: n.iupf1.x, y: n.corridorY },
+    { x: n.iupf1.x, y: n.iupf1.y - n.iupf1.h/2 }
+  ], '#64748b', 2.2, false, 'N9 (Eth10G)', { x: (n.upf.x + n.iupf1.x)/2, y: n.corridorY - 8 });
+
+  // Core -> iUpf2 (Orthogonal Manhattan path)
+  drawOrthogonalPath([
+    { x: n.upf.x + 20, y: n.upf.y + n.upf.h/2 },
+    { x: n.upf.x + 20, y: n.corridorY },
+    { x: n.iupf2.x, y: n.corridorY },
+    { x: n.iupf2.x, y: n.iupf2.y - n.iupf2.h/2 }
+  ], '#64748b', 2.2, false, 'N9 (Eth10G)', { x: (n.upf.x + n.iupf2.x)/2, y: n.corridorY - 8 });
+
+  // Local Breakout: iUpf1 <-> mecHost1
+  drawOrthogonalPath([
+    { x: n.iupf1.x - n.iupf1.w/2, y: n.iupf1.y },
+    { x: n.mec1.x + n.mec1.w/2, y: n.mec1.y }
+  ], '#38bdf8', 2.2, false, '2ms', { x: (n.iupf1.x - n.iupf1.w/2 + n.mec1.x + n.mec1.w/2)/2, y: n.iupf1.y - 9 });
+
+  // Local Breakout: iUpf2 <-> mecHost2
+  drawOrthogonalPath([
+    { x: n.iupf2.x + n.iupf2.w/2, y: n.iupf2.y },
+    { x: n.mec2.x - n.mec2.w/2, y: n.mec2.y }
+  ], '#34d399', 2.2, false, '2ms', { x: (n.iupf2.x + n.iupf2.w/2 + n.mec2.x - n.mec2.w/2)/2, y: n.iupf2.y - 9 });
+
+  // Backhaul N3: iUpf1 <-> gnb1 & iUpf2 <-> gnb2
+  drawOrthogonalPath([
+    { x: n.iupf1.x, y: n.iupf1.y + n.iupf1.h/2 },
+    { x: n.gnb1.x, y: n.gnb1.y - n.gnb1.h/2 }
+  ], '#64748b', 2.2, false, 'N3', { x: n.gnb1.x - 16, y: (n.iupf1.y + n.gnb1.y)/2 });
+
+  drawOrthogonalPath([
+    { x: n.iupf2.x, y: n.iupf2.y + n.iupf2.h/2 },
+    { x: n.gnb2.x, y: n.gnb2.y - n.gnb2.h/2 }
+  ], '#64748b', 2.2, false, 'N3', { x: n.gnb2.x + 16, y: (n.iupf2.y + n.gnb2.y)/2 });
+
+  // X2 Interface: gnb1 <-> gnb2
+  drawOrthogonalPath([
+    { x: n.gnb1.x + n.gnb1.w/2, y: n.gnb1.y },
+    { x: n.gnb2.x - n.gnb2.w/2, y: n.gnb2.y }
+  ], '#8b5cf6', 1.8, true, 'x2++ Interface', { x: (n.gnb1.x + n.gnb2.x)/2, y: n.gnb1.y - 9 });
+
+  // Radio Links: UEs <-> Serving gNBs
+  ues.forEach((u, idx) => {
+    const uNode = n.ues[idx];
+    const gNode = (u.gnb === 0) ? n.gnb1 : n.gnb2;
+    drawOrthogonalPath([
+      { x: uNode.x, y: uNode.y - uNode.h/2 },
+      { x: gNode.x, y: gNode.y + gNode.h/2 }
+    ], '#475569', 1.6, true);
+  });
+
+  // 2. Draw Network Nodes
+  // MEO Box with Live EWMA Scores
+  drawBox(n.meo, 'mecOrchestrator (MEO)', `Policy: ${policy} (α=${alpha.toFixed(1)})`, '#a855f7', '#131126');
+  ctx.font = '10px Consolas, monospace';
+  ctx.textAlign = 'center';
+  hosts.forEach((h, i) => {
+    ctx.fillStyle = h.color;
+    const txt = `H${i+1}: L̃=${h.lTilde.toFixed(1)}ms | C̃=${(h.cTilde*100).toFixed(0)}% | S=${h.score.toFixed(1)}`;
+    ctx.fillText(txt, n.meo.x, n.meo.y + 8 + i * 11);
+  });
+
+  drawBox(n.ualcmp, 'ualcmp', 'LCM Proxy', '#a855f7');
+  drawBox(n.upf, 'upf (Anchor UPF)', 'UL CL & N9 Router', '#38bdf8');
+  drawBox(n.iupf1, 'iUpf1', 'Local Breakout', '#38bdf8');
+  drawBox(n.iupf2, 'iUpf2', 'Local Breakout', '#34d399');
+  drawBox(n.gnb1, 'gnb1 (5G NR)', 'Cell ID: 1', '#94a3b8');
+  drawBox(n.gnb2, 'gnb2 (5G NR)', 'Cell ID: 2', '#94a3b8');
+
+  drawMecHost(n.mec1, hosts[0]);
+  drawMecHost(n.mec2, hosts[1]);
+  drawMecHost(n.mec3, hosts[2]);
+
+  ues.forEach((u, idx) => {
+    const uNode = n.ues[idx];
+    const isFb = u.fallbackActive > 0;
+    const bCol = isFb ? '#ef4444' : (u.boundHost >= 0 ? hosts[u.boundHost].color : '#64748b');
+    const sub = isFb ? 'LOCAL FALLBACK!' : (u.boundHost >= 0 ? `-> mecHost${u.boundHost+1}` : `${u.app}`);
+    drawBox(uNode, u.name, sub, bCol, isFb ? '#2a1215' : '#111827');
+  });
+
+  // 3. Draw Moving Packets
+  packets.forEach(p => {
+    const p1 = p.waypoints[p.seg];
+    const p2 = p.waypoints[p.seg + 1];
+    if (!p1 || !p2) return;
+    const px = p1.x + (p2.x - p1.x) * p.segProg;
+    const py = p1.y + (p2.y - p1.y) * p.segProg;
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(px, py, 6.5, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9.5px Consolas, monospace';
+    ctx.textAlign = 'center';
+    const lbl = p.type === 'LCM_REQ' ? `LCM#${p.task.id}` : `T#${p.task.id}`;
+    ctx.fillText(lbl, px, py - 10);
+    ctx.restore();
+  });
+
+  drawTelemetryChart();
+}
+
+function drawTelemetryChart() {
+  const cw = chartCanvas.width;
+  const ch = chartCanvas.height;
+  cctx.clearRect(0, 0, cw, ch);
+
+  cctx.strokeStyle = '#1e293b';
+  cctx.lineWidth = 1;
+  for (let g = 1; g < 4; g++) {
+    const gy = (ch / 4) * g;
+    cctx.beginPath(); cctx.moveTo(0, gy); cctx.lineTo(cw, gy); cctx.stroke();
+  }
+
+  if (latHistory.length < 2) return;
+  const stepX = cw / 44;
+
+  // Latency Line (Blue, scale 0..100ms)
+  cctx.beginPath();
+  cctx.strokeStyle = '#38bdf8';
+  cctx.lineWidth = 2;
+  latHistory.forEach((val, idx) => {
+    const x = idx * stepX;
+    const y = ch - Math.min(1, val / 100) * (ch - 14) - 7;
+    if (idx === 0) cctx.moveTo(x, y); else cctx.lineTo(x, y);
+  });
+  cctx.stroke();
+
+  // CPU Line (Amber, scale 0..100%)
+  cctx.beginPath();
+  cctx.strokeStyle = '#f59e0b';
+  cctx.lineWidth = 1.8;
+  cpuHistory.forEach((val, idx) => {
+    const x = idx * stepX;
+    const y = ch - Math.min(1, val / 100) * (ch - 14) - 7;
+    if (idx === 0) cctx.moveTo(x, y); else cctx.lineTo(x, y);
+  });
+  cctx.stroke();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+addLog('SYSTEM', 'Initialized Simu5G 4-Tier Orthogonal MEC Topology.', 'lcm');
+loop();
+</script>
+</body>
+</html>
